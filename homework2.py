@@ -11,6 +11,8 @@ import os
 
 import time
 
+from math import log
+
 def write_run(model_name, data, out_f,
               max_objects_per_query=sys.maxsize,
               skip_sorting=False):
@@ -241,15 +243,15 @@ def run_retrieval(model_name, score_fn):
 
         # For each query, we iterate over each document and score each of them
         for document_id in range(index.document_base(), index.maximum_document()):
-            document_term_freq = if2df[document_id]
+            document_term_freq = id2df[document_id]
             # Unsure if this is located somwhere else. Looking it up for now
-            ext_doc_id, _ = index.document(int_doc_id)
+            ext_doc_id, _ = index.document(document_id)
 
             score = score_fn(document_id, query_id, document_term_freq)
 
             document_scores_and_ids.append((score, ext_doc_id))
 
-        data[query_id] = tuple(document_scores)
+        data[query_id] = tuple(document_scores_and_ids)
 
     with open(run_out_path, 'w') as f_out:
         write_run(
@@ -270,7 +272,18 @@ def tfidf(int_document_id, query_term_id, document_term_freq):
     # Some nice available dicts:
     # token2id, id2token, id2df, id2tf
 
-    score = 0
+    def idf(term_id):
+        df_t = id2df[term_id]
+        return log(total_number_of_documents) - log(df_t)
+
+    def tf_idf(term_id):
+        tf = id2tf[term_id]
+        return log(1 + tf) * idf(term_id)
+
+    query_term_ids = [token_id for token_id in tokenized_queries[query_term_id]]
+
+    score = sum([tf_idf(term_id) for term_id in query_term_ids])
+
     return score
 
 # combining the two functions above:
