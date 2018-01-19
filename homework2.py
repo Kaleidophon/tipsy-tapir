@@ -77,26 +77,28 @@ import pyndri
 
 index = pyndri.Index('index/')
 
-print("There are %d documents in this collection." % (index.maximum_document() - index.document_base()))
+total_number_of_documents = index.maximum_document() - index.document_base()
 
 example_document = index.document(index.document_base())
-print(example_document)
+# print(example_document)
 
-token2id, id2token, _ = index.get_dictionary()
-print(list(id2token.items())[:15])
+token2id, id2token, id2df = index.get_dictionary()
+id2tf = index.get_term_frequencies()
 
-print([id2token[word_id] for word_id in example_document[1] if word_id > 0])
+# print(list(id2token.items())[:15])
+
+# print([id2token[word_id] for word_id in example_document[1] if word_id > 0])
 
 query_tokens = index.tokenize("University of Massachusetts")
-print("Query by tokens:", query_tokens)
+# print("Query by tokens:", query_tokens)
 query_id_tokens = [token2id.get(query_token,0) for query_token in query_tokens]
-print("Query by ids with stopwords:", query_id_tokens)
+# print("Query by ids with stopwords:", query_id_tokens)
 query_id_tokens = [word_id for word_id in query_id_tokens if word_id > 0]
-print("Query by ids without stopwords:", query_id_tokens)
+# print("Query by ids without stopwords:", query_id_tokens)
 
 matching_words = sum([True for word_id in example_document[1] if word_id in query_id_tokens])
-print("Document %s has %d word matches with query: \"%s\"." % (example_document[0], matching_words, ' '.join(query_tokens)))
-print("Document %s and query \"%s\" have a %.01f%% overlap." % (example_document[0], ' '.join(query_tokens),matching_words/float(len(example_document[1]))*100))
+# print("Document %s has %d word matches with query: \"%s\"." % (example_document[0], matching_words, ' '.join(query_tokens)))
+# print("Document %s and query \"%s\" have a %.01f%% overlap." % (example_document[0], ' '.join(query_tokens),matching_words/float(len(example_document[1]))*100))
 
 ### Parsing the query file
 import collections
@@ -143,8 +145,8 @@ def parse_topics(file_or_files,
 
     return topics
 
-with open('./ap_88_89/topics_title', 'r') as f_topics:
-    print(parse_topics([f_topics]))
+# with open('./ap_88_89/topics_title', 'r') as f_topics:
+    # print(parse_topics([f_topics]))
 
 # ------------------------------------------------
 # Task 1: Implement and compare lexical IR methods
@@ -173,72 +175,90 @@ query_term_ids = set(
     for query_term_ids in tokenized_queries.values()
     for query_term_id in query_term_ids)
 
-print('Gathering statistics about', len(query_term_ids), 'terms.')
+# print('Gathering statistics about', len(query_term_ids), 'terms.')
 
 # inverted index creation.
-start_time = time.time()
+# start_time = time.time()
+#
+# document_lengths = {}
+# unique_terms_per_document = {}
+#
+# inverted_index = collections.defaultdict(dict)
+# collection_frequencies = collections.defaultdict(int)
+#
+# total_terms = 0
+#
+# for int_doc_id in range(index.document_base(), index.maximum_document()):
+#     ext_doc_id, doc_token_ids = index.document(int_doc_id)
+#
+#     document_bow = collections.Counter(
+#         token_id for token_id in doc_token_ids
+#         if token_id > 0)
+#     document_length = sum(document_bow.values())
+#
+#     document_lengths[int_doc_id] = document_length
+#     total_terms += document_length
+#
+#     unique_terms_per_document[int_doc_id] = len(document_bow)
+#
+#     for query_term_id in query_term_ids:
+#         assert query_term_id is not None
+#
+#         document_term_frequency = document_bow.get(query_term_id, 0)
+#
+#         if document_term_frequency == 0:
+#             continue
+#
+#         collection_frequencies[query_term_id] += document_term_frequency
+#         inverted_index[query_term_id][int_doc_id] = document_term_frequency
+#
+# avg_doc_length = total_terms / num_documents
 
-document_lengths = {}
-unique_terms_per_document = {}
-
-inverted_index = collections.defaultdict(dict)
-collection_frequencies = collections.defaultdict(int)
-
-total_terms = 0
-
-for int_doc_id in range(index.document_base(), index.maximum_document()):
-    ext_doc_id, doc_token_ids = index.document(int_doc_id)
-
-    document_bow = collections.Counter(
-        token_id for token_id in doc_token_ids
-        if token_id > 0)
-    document_length = sum(document_bow.values())
-
-    document_lengths[int_doc_id] = document_length
-    total_terms += document_length
-
-    unique_terms_per_document[int_doc_id] = len(document_bow)
-
-    for query_term_id in query_term_ids:
-        assert query_term_id is not None
-
-        document_term_frequency = document_bow.get(query_term_id, 0)
-
-        if document_term_frequency == 0:
-            continue
-
-        collection_frequencies[query_term_id] += document_term_frequency
-        inverted_index[query_term_id][int_doc_id] = document_term_frequency
-
-avg_doc_length = total_terms / num_documents
-
-print('Inverted index creation took', time.time() - start_time, 'seconds.')
+# print('Inverted index creation took', time.time() - start_time, 'seconds.')
 
 def run_retrieval(model_name, score_fn):
     """
     Runs a retrieval method for all the queries and writes the TREC-friendly results in a file.
     :param model_name: the name of the model (a string)
-    :param score_fn: the scoring function (a function - see below for an example) 
+    :param score_fn: the scoring function (a function - see below for an example)
     """
     run_out_path = '{}.run'.format(model_name)
 
-    if os.path.exists(run_out_path):
-        return
+    # if os.path.exists(run_out_path):
+    #     return
 
     retrieval_start_time = time.time()
 
     print('Retrieving using', model_name)
 
+    # The dictionary data should have the form: query_id --> (document_score, external_doc_id)
     data = {}
 
-    # TODO: fill the data dictionary.
-    # The dictionary data should have the form: query_id --> (document_score, external_doc_id)
+    for query in queries.items():
+        query_id, query_tokens = query
+
+        document_scores_and_ids = []
+
+        # For each query, we iterate over each document and score each of them
+        for document_id in range(index.document_base(), index.maximum_document()):
+            document_term_freq = if2df[document_id]
+            # Unsure if this is located somwhere else. Looking it up for now
+            ext_doc_id, _ = index.document(int_doc_id)
+
+            score = score_fn(document_id, query_id, document_term_freq)
+
+            document_scores_and_ids.append((score, ext_doc_id))
+
+        data[query_id] = tuple(document_scores)
+
     with open(run_out_path, 'w') as f_out:
         write_run(
             model_name=model_name,
             data=data,
             out_f=f_out,
             max_objects_per_query=1000)
+
+    return data
 
 def tfidf(int_document_id, query_term_id, document_term_freq):
     """
@@ -247,7 +267,9 @@ def tfidf(int_document_id, query_term_id, document_term_freq):
     :param query_token_id: the query term id (assuming you have split the query to tokens)
     :param document_term_freq: the document term frequency of the query term
     """
-    # TODO implement the function
+    # Some nice available dicts:
+    # token2id, id2token, id2df, id2tf
+
     score = 0
     return score
 
