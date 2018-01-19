@@ -226,8 +226,10 @@ def run_retrieval(model_name, score_fn):
     """
     run_out_path = '{}.run'.format(model_name)
 
-    # if os.path.exists(run_out_path):
-    #     return
+    run_id = 0
+    while os.path.exists(run_out_path):
+        run_id += 1
+        run_out_path = '{}_{}.run'.format(model_name, run_id)
 
     retrieval_start_time = time.time()
 
@@ -236,7 +238,8 @@ def run_retrieval(model_name, score_fn):
     # The dictionary data should have the form: query_id --> (document_score, external_doc_id)
     data = {}
 
-    for query in queries.items():
+    for i, query in enumerate(queries.items()):
+        print("Scoring query {} out of {} queries".format(i, len(queries)))
         query_id, query_tokens = query
 
         document_scores_and_ids = []
@@ -251,7 +254,7 @@ def run_retrieval(model_name, score_fn):
 
             document_scores_and_ids.append((score, ext_doc_id))
 
-        data[query_id] = tuple(document_scores_and_ids)
+        data[query_id] = tuple(sorted(document_scores_and_ids))
 
     with open(run_out_path, 'w') as f_out:
         write_run(
