@@ -9,6 +9,8 @@ import logging
 import sys
 import os
 
+import time
+
 def write_run(model_name, data, out_f,
               max_objects_per_query=sys.maxsize,
               skip_sorting=False):
@@ -174,6 +176,7 @@ query_term_ids = set(
 print('Gathering statistics about', len(query_term_ids), 'terms.')
 
 # inverted index creation.
+start_time = time.time()
 
 document_lengths = {}
 unique_terms_per_document = {}
