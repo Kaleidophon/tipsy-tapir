@@ -5,13 +5,19 @@
 # -----------------------
 #  Pre-handed code
 # -----------------------
-import logging
 import sys
 import os
+import io
+import logging
+import collections
+
+### Pyndri primer
+import pyndri
 
 import time
 
 from math import log
+
 
 def write_run(model_name, data, out_f,
               max_objects_per_query=sys.maxsize,
@@ -65,6 +71,8 @@ def write_run(model_name, data, out_f,
 # The following writes the run to standard output.
 # In your code, you should write the runs to local
 # storage in order to pass them to trec_eval.
+
+
 write_run(
     model_name='example',
     data={
@@ -74,8 +82,6 @@ write_run(
     out_f=sys.stdout,
     max_objects_per_query=1000)
 
-### Pyndri primer
-import pyndri
 
 index = pyndri.Index('index/')
 
@@ -93,7 +99,7 @@ id2tf = index.get_term_frequencies()
 
 query_tokens = index.tokenize("University of Massachusetts")
 # print("Query by tokens:", query_tokens)
-query_id_tokens = [token2id.get(query_token,0) for query_token in query_tokens]
+query_id_tokens = [token2id.get(query_token, 0) for query_token in query_tokens]
 # print("Query by ids with stopwords:", query_id_tokens)
 query_id_tokens = [word_id for word_id in query_id_tokens if word_id > 0]
 # print("Query by ids without stopwords:", query_id_tokens)
@@ -102,11 +108,8 @@ matching_words = sum([True for word_id in example_document[1] if word_id in quer
 # print("Document %s has %d word matches with query: \"%s\"." % (example_document[0], matching_words, ' '.join(query_tokens)))
 # print("Document %s and query \"%s\" have a %.01f%% overlap." % (example_document[0], ' '.join(query_tokens),matching_words/float(len(example_document[1]))*100))
 
-### Parsing the query file
-import collections
-import io
-import logging
-import sys
+# Parsing the query file
+
 
 def parse_topics(file_or_files,
                  max_topics=sys.maxsize, delimiter=';'):
@@ -218,6 +221,7 @@ query_term_ids = set(
 
 # print('Inverted index creation took', time.time() - start_time, 'seconds.')
 
+
 def run_retrieval(model_name, score_fn):
     """
     Runs a retrieval method for all the queries and writes the TREC-friendly results in a file.
@@ -265,11 +269,12 @@ def run_retrieval(model_name, score_fn):
 
     return data
 
+
 def tfidf(int_document_id, query_term_id, document_term_freq):
     """
     Scoring function for a document and a query term
     :param int_document_id: the document id
-    :param query_token_id: the query term id (assuming you have split the query to tokens)
+    :param query_term_id: the query term id (assuming you have split the query to tokens)
     :param document_term_freq: the document term frequency of the query term
     """
     # Some nice available dicts:
@@ -289,14 +294,20 @@ def tfidf(int_document_id, query_term_id, document_term_freq):
 
     return score
 
+def bm25(int_document_id, query_term_id, document_term_freq):
+    pass
+
 # combining the two functions above:
+
+
 run_retrieval('tfidf', tfidf)
+
 
 # TODO implement the rest of the retrieval functions
 
 # TODO implement tools to help you with the analysis of the results.
 
-### End of provided functions
+# End of provided functions
 
 # ------------------------------
 # Task 2: Latent Semantic Models
