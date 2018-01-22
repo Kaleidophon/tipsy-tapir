@@ -247,7 +247,7 @@ def run_retrieval(model_name, score_fn):
         query_id, query_tokens = query
 
         document_scores_and_ids = []
-        query_term_ids = [token_id for token_id in tokenized_queries[query_id]]
+        query_term_ids = tokenized_queries[query_id]
 
         # For each query, we iterate over each document and score each of it's terms
         for document_id in range(index.document_base(), index.maximum_document()):
@@ -274,6 +274,9 @@ def run_retrieval(model_name, score_fn):
 
     return data
 
+def idf(term_id):
+    df_t = id2df[term_id]
+    return log(total_number_of_documents) - log(df_t)
 
 def tfidf(int_document_id, query_term_id, document_term_freq):
     """
@@ -285,10 +288,6 @@ def tfidf(int_document_id, query_term_id, document_term_freq):
     """
     # Some nice available dicts:
     # token2id, id2token, id2df, id2tf
-
-    def idf(term_id):
-        df_t = id2df[term_id]
-        return log(total_number_of_documents) - log(df_t)
 
     def tf_idf(term_id):
         # Normalize the term frequency based on the document length
@@ -302,12 +301,33 @@ def tfidf(int_document_id, query_term_id, document_term_freq):
     return score
 
 def bm25(int_document_id, query_term_id, document_term_freq):
-    pass
+    """
+    Scoring function for a document and a query term using the BM25 model
+
+    :param int_document_id: the document id
+    :param query_term_id: the query term id (assuming you have split the query to tokens)
+    :param document_term_freq: the document term frequency of the query term
+
+    Since all the scoring functions are supposed to only score one query term,
+    the BM25 summation is being done outside this function.
+    Do note that we leave the k_3 factor out, since all the queries
+    in this assignment can be assumed to be reasonably short.
+    """
+    # Parameters given by the assignment
+    k_1 = 1.2
+    b = 0.75
+    l_d = index.document_length(int_document_id)
+    l_average = avg_doc_length
+
+    bm25_score = idf(query_term_id)*(k_1 + 1 * document_term_freq) / (k_1 * ((1-b) + b * (l_d/l_average)) + document_term_freq)
+    # Use log probabilities to avoid underflow
+    return log(bm25_score)
 
 # combining the two functions above:
 
 
-run_retrieval('tfidf', tfidf)
+# run_retrieval('tfidf', tfidf)
+run_retrieval('BM25', bm25)
 
 
 # TODO implement the rest of the retrieval functions
