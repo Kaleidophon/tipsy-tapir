@@ -271,6 +271,7 @@ dictionary = pyndri.extract_dictionary(index)
 
 from gensim.models import Word2Vec
 import pyndri.compat
+import time
 
 print("Training word embeddings...")
 
@@ -283,10 +284,32 @@ def train_word_embeddings(pyndri_index, epochs, **model_parameters):
     word2vec.build_vocab(sentences, trim_rule=None)
 
     print("Start training...")
-    # Expected count 267318
     for epoch in range(epochs):
+        start = time.time()
+
         word2vec.train(sentences, total_examples=len(sentences), epochs=1, compute_loss=True)
+
+        end = time.time()
+        print("Epoch #{} took {:.2f} seconds.".format(epoch+1, end-start))
         print("Loss epoch #{}: {}".format(epoch+1, word2vec.running_training_loss))
+
+    return word2vec
+
+
+def save_word2vec_model(model, path):
+    model.save(path)
+
+
+def load_word2vec_model(path, to_train=False):
+    model = Word2Vec.load(path)
+
+    if to_train:
+        return model
+
+    # In case it doesn't need to be trained, delete train code to free up ram
+    word_vectors = model.wv
+    del model
+    return word_vectors
 
 
 WORD_EMBEDDING_PARAMS = {
@@ -298,10 +321,11 @@ WORD_EMBEDDING_PARAMS = {
     "hs": False,  # Hierarchical softmax.
     "negative": 10,  # Number of negative examples.
     "iter": 1,  # Number of iterations.
-    "workers": 8  # Number of workers
+    "workers": 4  # Number of workers
 }
 
-train_word_embeddings(index, epochs=10, **WORD_EMBEDDING_PARAMS)
+w2v_model = train_word_embeddings(index, epochs=2, **WORD_EMBEDDING_PARAMS)
+save_word2vec_model(w2v_model, "./w2v_test")
 
 # ------------------------------
 # Task 4: Learning to rank (LTR)
