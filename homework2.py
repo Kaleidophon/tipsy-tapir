@@ -180,46 +180,46 @@ query_term_ids = set(
     for query_term_ids in tokenized_queries.values()
     for query_term_id in query_term_ids)
 
-# print('Gathering statistics about', len(query_term_ids), 'terms.')
+print('Gathering statistics about', len(query_term_ids), 'terms.')
 
 # inverted index creation.
-# start_time = time.time()
-#
-# document_lengths = {}
-# unique_terms_per_document = {}
-#
-# inverted_index = collections.defaultdict(dict)
-# collection_frequencies = collections.defaultdict(int)
-#
-# total_terms = 0
-#
-# for int_doc_id in range(index.document_base(), index.maximum_document()):
-#     ext_doc_id, doc_token_ids = index.document(int_doc_id)
-#
-#     document_bow = collections.Counter(
-#         token_id for token_id in doc_token_ids
-#         if token_id > 0)
-#     document_length = sum(document_bow.values())
-#
-#     document_lengths[int_doc_id] = document_length
-#     total_terms += document_length
-#
-#     unique_terms_per_document[int_doc_id] = len(document_bow)
-#
-#     for query_term_id in query_term_ids:
-#         assert query_term_id is not None
-#
-#         document_term_frequency = document_bow.get(query_term_id, 0)
-#
-#         if document_term_frequency == 0:
-#             continue
-#
-#         collection_frequencies[query_term_id] += document_term_frequency
-#         inverted_index[query_term_id][int_doc_id] = document_term_frequency
-#
-# avg_doc_length = total_terms / num_documents
+start_time = time.time()
 
-# print('Inverted index creation took', time.time() - start_time, 'seconds.')
+document_lengths = {}
+unique_terms_per_document = {}
+
+inverted_index = collections.defaultdict(lambda: collections.defaultdict(int))
+collection_frequencies = collections.defaultdict(int)
+
+total_terms = 0
+
+for int_doc_id in range(index.document_base(), index.maximum_document()):
+    ext_doc_id, doc_token_ids = index.document(int_doc_id)
+
+    document_bow = collections.Counter(
+        token_id for token_id in doc_token_ids
+        if token_id > 0)
+    document_length = sum(document_bow.values())
+
+    document_lengths[int_doc_id] = document_length
+    total_terms += document_length
+
+    unique_terms_per_document[int_doc_id] = len(document_bow)
+
+    for query_term_id in query_term_ids:
+        assert query_term_id is not None
+
+        document_term_frequency = document_bow.get(query_term_id, 0)
+
+        if document_term_frequency == 0:
+            continue
+
+        collection_frequencies[query_term_id] += document_term_frequency
+        inverted_index[query_term_id][int_doc_id] = document_term_frequency
+
+avg_doc_length = total_terms / num_documents
+
+print('Inverted index creation took', time.time() - start_time, 'seconds.')
 
 
 def run_retrieval(model_name, score_fn):
@@ -247,14 +247,19 @@ def run_retrieval(model_name, score_fn):
         query_id, query_tokens = query
 
         document_scores_and_ids = []
+        query_term_ids = [token_id for token_id in tokenized_queries[query_id]]
 
-        # For each query, we iterate over each document and score each of them
+        # For each query, we iterate over each document and score each of it's terms
         for document_id in range(index.document_base(), index.maximum_document()):
-            document_term_freq = id2df[document_id]
-            # Unsure if this is located somwhere else. Looking it up for now
+            # Unsure if this is located somewhere else. Looking it up for now
             ext_doc_id, _ = index.document(document_id)
 
-            score = score_fn(document_id, query_id, document_term_freq)
+            # Accumulate the score for each query term.
+            # TODO: Implement cosine similarity instead of just the accumulated sum
+            score = 0
+            for query_term_id in query_term_ids:
+                document_term_freq = inverted_index[query_term_id][document_id]
+                score += score_fn(document_id, query_term_id, document_term_freq)
 
             document_scores_and_ids.append((score, ext_doc_id))
 
@@ -273,6 +278,7 @@ def run_retrieval(model_name, score_fn):
 def tfidf(int_document_id, query_term_id, document_term_freq):
     """
     Scoring function for a document and a query term
+
     :param int_document_id: the document id
     :param query_term_id: the query term id (assuming you have split the query to tokens)
     :param document_term_freq: the document term frequency of the query term
@@ -285,12 +291,13 @@ def tfidf(int_document_id, query_term_id, document_term_freq):
         return log(total_number_of_documents) - log(df_t)
 
     def tf_idf(term_id):
-        tf = id2tf[term_id]
+        # Normalize the term frequency based on the document length
+        # Some documents are of length zero, so we need to account for this
+        tf = document_term_freq / max(index.document_length(int_document_id), 1)
+        print("Normalized Term freq", tf)
         return log(1 + tf) * idf(term_id)
 
-    query_term_ids = [token_id for token_id in tokenized_queries[query_term_id]]
-
-    score = sum([tf_idf(term_id) for term_id in query_term_ids])
+    score = tf_idf(query_term_id)
 
     return score
 
