@@ -235,8 +235,6 @@ def run_retrieval(model_name, score_fn):
         run_id += 1
         run_out_path = '{}_{}.run'.format(model_name, run_id)
 
-    retrieval_start_time = time.time()
-
     print('Retrieving using', model_name)
 
     # The dictionary data should have the form: query_id --> (document_score, external_doc_id)
@@ -263,7 +261,7 @@ def run_retrieval(model_name, score_fn):
 
             document_scores_and_ids.append((score, ext_doc_id))
 
-        data[query_id] = tuple(sorted(document_scores_and_ids))
+        data[query_id] = tuple(document_scores_and_ids)
 
     with open(run_out_path, 'w') as f_out:
         write_run(
@@ -272,11 +270,14 @@ def run_retrieval(model_name, score_fn):
             out_f=f_out,
             max_objects_per_query=1000)
 
-    return data
+    print("Done writing results to run file")
 
 def idf(term_id):
     df_t = id2df[term_id]
     return log(total_number_of_documents) - log(df_t)
+
+def tf_idf(term_id):
+    return log(1 + document_term_freq) * idf(term_id)
 
 def tfidf(int_document_id, query_term_id, document_term_freq):
     """
@@ -288,13 +289,6 @@ def tfidf(int_document_id, query_term_id, document_term_freq):
     """
     # Some nice available dicts:
     # token2id, id2token, id2df, id2tf
-
-    def tf_idf(term_id):
-        # Normalize the term frequency based on the document length
-        # Some documents are of length zero, so we need to account for this
-        tf = document_term_freq / max(index.document_length(int_document_id), 1)
-        print("Normalized Term freq", tf)
-        return log(1 + tf) * idf(term_id)
 
     score = tf_idf(query_term_id)
 
@@ -319,8 +313,11 @@ def bm25(int_document_id, query_term_id, document_term_freq):
     l_d = index.document_length(int_document_id)
     l_average = avg_doc_length
 
-    bm25_score = idf(query_term_id)*(k_1 + 1 * document_term_freq) / (k_1 * ((1-b) + b * (l_d/l_average)) + document_term_freq)
+    bm25_score = idf(query_term_id)*((k_1 + 1) * document_term_freq) / (k_1 * ((1-b) + b * (l_d/l_average)) + document_term_freq)
     # Use log probabilities to avoid underflow
+    if bm25_score == 0:
+        return 0
+
     return log(bm25_score)
 
 # combining the two functions above:
