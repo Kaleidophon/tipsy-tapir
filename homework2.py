@@ -276,7 +276,7 @@ def idf(term_id):
     df_t = id2df[term_id]
     return log(total_number_of_documents) - log(df_t)
 
-def tf_idf(term_id):
+def tf_idf(term_id, document_term_freq):
     return log(1 + document_term_freq) * idf(term_id)
 
 def tfidf(int_document_id, query_term_id, document_term_freq):
@@ -290,9 +290,10 @@ def tfidf(int_document_id, query_term_id, document_term_freq):
     # Some nice available dicts:
     # token2id, id2token, id2df, id2tf
 
-    score = tf_idf(query_term_id)
+    score = tf_idf(query_term_id, document_term_freq)
 
     return score
+
 
 def bm25(int_document_id, query_term_id, document_term_freq):
     """
