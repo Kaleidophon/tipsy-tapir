@@ -269,63 +269,89 @@ dictionary = pyndri.extract_dictionary(index)
 # Task 3: Word embeddings for ranking
 # -----------------------------------
 
-from gensim.models import Word2Vec
-import pyndri.compat
-import time
-
-print("Training word embeddings...")
+# TODO: Load model and stuff
 
 
-def train_word_embeddings(pyndri_index, epochs, **model_parameters):
-    vocabulary = pyndri.extract_dictionary(pyndri_index)
-    sentences = pyndri.compat.IndriSentences(pyndri_index, vocabulary)
+def calculate_document_centroids(pyndri_index, word_vectors, stop_words=tuple()):
+    centroids = dict()
 
-    word2vec = Word2Vec(**model_parameters)
-    word2vec.build_vocab(sentences, trim_rule=None)
+    token2id, id2token, _ = pyndri_index.get_dictionary()
 
-    print("Start training...")
-    for epoch in range(epochs):
-        start = time.time()
+    stop_word_ids = []
+    if len(stop_words) > 0:
+        stop_word_ids.extend([token2id[stop_word] for stop_word in stop_words])
+        stop_word_ids = set(stop_word_ids)
 
-        word2vec.train(sentences, total_examples=len(sentences), epochs=1, compute_loss=True)
+    for document_id in range(pyndri_index.document_base(), pyndri_index.maximum_document()):
+        ext_doc_id, token_ids = pyndri_index.document(document_id)
+        _, id2token, _ = pyndri_index.get_dictionary()
 
-        end = time.time()
-        print("Epoch #{} took {:.2f} seconds.".format(epoch+1, end-start))
-        print("Loss epoch #{}: {}".format(epoch+1, word2vec.running_training_loss))
+        token_ids = [token_id for token_id in token_ids if token_id not in stop_word_ids]  # Filter out stop words
+        centroid = sum([word_vectors[id2token[token_id]] for token_id in token_ids]) / len(token_ids)
 
-    return word2vec
+        centroids[document_id] = centroid
 
-
-def save_word2vec_model(model, path):
-    model.save(path)
+    return centroids
 
 
-def load_word2vec_model(path, to_train=False):
-    model = Word2Vec.load(path)
+def score_by_summing(query_token_ids, pyndri_index, word_vectors, **kwargs):
+    """
+    Score a query and documents by taking the word embeddings of the words they contain and simply sum them,
+    afterwards comparing the summed vectors with cosine similarity.
+    """
+    # Get query vector
+    _, id2token, _ = pyndri_index.get_dictionary()
+    # Just sum
+    query_vector = sum([word_vectors[id2token[query_token_id]] for query_token_id in query_token_ids])
 
-    if to_train:
-        return model
+    # Score documents
+    document_scores = []
+    for document_id in range(pyndri_index.document_base(), pyndri_index.maximum_document()):
+        ext_doc_id, token_ids = pyndri_index.document(document_id)
 
-    # In case it doesn't need to be trained, delete train code to free up ram
-    word_vectors = model.wv
-    del model
-    return word_vectors
+        document_vector = sum([word_vectors[id2token[token_id]] for token_id in token_ids])
+
+        # TODO: Add cosine similarity here
+        score = 0
+
+        document_scores.append((score, document_vector))
+
+    return document_scores
 
 
-WORD_EMBEDDING_PARAMS = {
-    "size": 300,  # Embedding size
-    "window": 5,  # One-sided window size
-    "sg": True,  # Skip-gram.
-    "min_count": 5,  # Minimum word frequency.
-    "sample": 1e-3,  # Sub-sample threshold.
-    "hs": False,  # Hierarchical softmax.
-    "negative": 10,  # Number of negative examples.
-    "iter": 1,  # Number of iterations.
-    "workers": 4  # Number of workers
-}
+def score_by_centroids(query_token_ids, pyndri_index, word_vectors, document_centroids, stop_words=tuple(), **kwargs):
+    """
+    Score a query and documents by taking the word embeddings of the words they contain and calculate the centroids.
+    Finally, compare the centroids using cosine similarities.
+    """
+    # Get query vector
+    token2id, id2token, _ = pyndri_index.get_dictionary()
 
-w2v_model = train_word_embeddings(index, epochs=2, **WORD_EMBEDDING_PARAMS)
-save_word2vec_model(w2v_model, "./w2v_test")
+    # Remove stopwords from query / documents
+    stop_word_ids = []
+    if len(stop_words) > 0:
+        stop_word_ids.extend([token2id[stop_word] for stop_word in stop_words])
+
+    # Just sum
+    # Filter out stop words
+    query_token_ids = [query_token_id for query_token_id in query_token_ids if query_token_id not in stop_word_ids]
+    query_vector = sum([
+        word_vectors[id2token[query_token_id]] for query_token_id in query_token_ids
+    ]) / len(query_token_ids)
+
+    # Score documents
+    document_scores = []
+    for document_id in range(pyndri_index.document_base(), pyndri_index.maximum_document()):
+        ext_doc_id, token_ids = pyndri_index.document(document_id)
+
+        document_vector = document_centroids[document_id]
+
+        # TODO: Add cosine similarity here
+        score = 0
+
+        document_scores.append((score, document_vector))
+
+    return document_scores
 
 # ------------------------------
 # Task 4: Learning to rank (LTR)

@@ -3,30 +3,38 @@ import pyndri.compat
 import time
 import numpy as np
 import matplotlib.pyplot as plt
+import pickle
 
 
 print("Training word embeddings...")
 
 
-def train_word_embeddings(pyndri_index, epochs, epsilon=None, **model_parameters):
+def build_sentences(pyndri_index):
     vocabulary = pyndri.extract_dictionary(pyndri_index)
     sentences = pyndri.compat.IndriSentences(pyndri_index, vocabulary)
+    return sentences
 
+
+def train_word_embeddings(sentences, epochs, epsilon=None, **model_parameters):
     word2vec = Word2Vec(**model_parameters)
     word2vec.build_vocab(sentences, trim_rule=None)
 
     last_loss = None
     losses = []
+    model = word2vec
     print("Start training...")
     for epoch in range(epochs):
         print("Starting epoch #{}...".format(epoch+1))
         start = time.time()
+
+        word2vec = model
 
         word2vec.train(sentences, total_examples=len(sentences), epochs=1, compute_loss=True)
 
         end = time.time()
         current_loss = word2vec.running_training_loss
         losses.append(current_loss)
+        model = word2vec
         print("Epoch #{} took {:.2f} seconds.".format(epoch+1, end-start))
         print("Loss epoch #{}: {}".format(epoch+1, current_loss))
 
@@ -69,6 +77,7 @@ def load_word2vec_model(path, to_train=False):
 
 
 WORD_EMBEDDING_PARAMS = {
+    "alpha": 0.000025,  # Learning rate
     "size": 300,  # Embedding size
     "window": 5,  # One-sided window size
     "sg": True,  # Skip-gram.
@@ -89,9 +98,11 @@ def plot_losses(losses, epochs):
 
 if __name__ == "__main__":
     # Train
-    EPOCHS = 2
+    EPOCHS = 20
     index = pyndri.Index('index/')
-    w2v_model, losses = train_word_embeddings(index, epochs=EPOCHS, **WORD_EMBEDDING_PARAMS)
+    sentences = build_sentences(index)
+    #sentences_subset = [sentence for i, sentence in enumerate(sentences) if i < 25000]
+    w2v_model, losses = train_word_embeddings(sentences, epochs=EPOCHS, **WORD_EMBEDDING_PARAMS)
     save_word2vec_model(w2v_model, "./w2v_test")
     plot_losses(losses, EPOCHS)
 
