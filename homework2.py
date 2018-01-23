@@ -256,7 +256,7 @@ def query_document_similarity(query_term_ids, document_id):
     document_vector = np.array([tf_idf(query_term_id, inverted_index[query_term_id][document_id]) for query_term_id in query_term_ids])
     return cosine_similarity(query_vector, document_vector)
 
-def run_retrieval(model_name, score_fn):
+def run_retrieval(model_name, score_fn, max_objects_per_query=1000):
     """
     Runs a retrieval method for all the queries and writes the TREC-friendly results in a file.
     :param model_name: the name of the model (a string)
@@ -283,14 +283,14 @@ def run_retrieval(model_name, score_fn):
 
         # All score_fn _must_ return a list of tuples that has the following form: tuple(document_score, external_doc_id)
         query_scores = score_fn(query_term_ids) # example: query_score = [(2, doc1), (200, doc3), (0, doc4)]
-        data[query_id] = tuple(query_scores)
+        data[query_id] = list(sorted(query_scores, reverse=True))[:max_objects_per_query]
 
     with open(run_out_path, 'w') as f_out:
         write_run(
             model_name=model_name,
             data=data,
             out_f=f_out,
-            max_objects_per_query=1000)
+            max_objects_per_query=max_objects_per_query)
 
     print("Done writing results to run file")
     return
@@ -306,28 +306,25 @@ def score_tfidf(query_term_id):
     """
     Scoring function for a specific query, for all documents.
 
-    :param int_document_id: the document id
-    :param query_term_id: the query term id (assuming you have split the query to tokens)
-    :param document_term_freq: the document term frequency of the query term
-    :returns A list of the form [(score_for_doc1, doc1_external_id), (score_for_doc5, doc5_external_id), ... ]
+    :param query_term_ids: A list of the query terms that consitutes the given query
+    :returns: A list of tuples scoring all documents
     """
 
     scores = []
     for document_id in range(index.document_base(), index.maximum_document()):
         ext_doc_id, _ = index.document(document_id)
         score = query_document_similarity(query_term_id, document_id)
-        print("tfidf score:", score)
         scores.append((score, ext_doc_id))
 
     return scores
 
 def bm25(query_term_ids):
     """
-    Scoring function for a document and a query term using the BM25 model
+    Scoring function for a list of query terms, using the BM25 model.
+    Returns the score for all documents in the light of this query.
 
-    :param int_document_id: the document id
-    :param query_term_id: the query term id (assuming you have split the query to tokens)
-    :param document_term_freq: the document term frequency of the query term
+    :param query_term_ids: A list of the query terms that consitutes the given query
+    :returns: A list of tuples scoring all documents
 
     Since all the scoring functions are supposed to only score one query term,
     the BM25 summation is being done outside this function.
@@ -359,8 +356,8 @@ def bm25(query_term_ids):
 
 # combining the two functions above:
 
-run_retrieval('tfidf', score_tfidf)
-# run_retrieval('BM25', bm25)
+# run_retrieval('tfidf', score_tfidf)
+run_retrieval('BM25', bm25)
 
 
 # TODO implement the rest of the retrieval functions
