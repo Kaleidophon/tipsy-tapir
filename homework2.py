@@ -223,7 +223,7 @@ avg_doc_length = total_terms / num_documents
 print('Inverted index creation took', time.time() - start_time, 'seconds.')
 
 
-def query_document_similarity(query_term_ids, document_id, score_fn):
+def query_document_similarity(query_term_ids, document_id):
     """
     Calculates the scores for both the query and the document given by the query_term_ids
     and the document_id in light of the given score function. These scores are then
@@ -238,10 +238,10 @@ def query_document_similarity(query_term_ids, document_id, score_fn):
     """
     # Assuming that words are not repeated in queries for now. TOOD: Remove assumption and do actual counts
     query_vector = [tf_idf(query_term_id, 1/len(query_term_ids)) for query_term_id in query_term_ids]
-    document_vector = [score_fn(document_id, query_term_id, inverted_index[query_term_id][document_id]) for query_term_id in query_term_ids]
+    document_vector = [tf_idf(query_term_id, inverted_index[query_term_id][document_id]) for query_term_id in query_term_ids]
     return cosine_similarity(query_vector, document_vector)
 
-def run_retrieval(model_name, score_fn, accumulate_score=True):
+def run_retrieval(model_name, score_fn):
     """
     Runs a retrieval method for all the queries and writes the TREC-friendly results in a file.
     :param model_name: the name of the model (a string)
@@ -263,29 +263,12 @@ def run_retrieval(model_name, score_fn, accumulate_score=True):
 
     for i, query in enumerate(queries.items()):
         print("Scoring query {} out of {} queries".format(i, len(queries)))
-        query_id, query_tokens = query
-
-        document_scores_and_ids = []
+        query_id, _ = query
         query_term_ids = tokenized_queries[query_id]
 
-        # For each query, we iterate over each document and score each of it's terms
-        for document_id in range(index.document_base(), index.maximum_document()):
-            # Unsure if this is located somewhere else. Looking it up for now
-            ext_doc_id, _ = index.document(document_id)
-
-            # Accumulate the score for each query term.
-            # TODO: Implement cosine similarity instead of just the accumulated sum
-            score = 0
-            if accumulate_score:
-                for query_term_id in query_term_ids:
-                    document_term_freq = inverted_index[query_term_id][document_id]
-                    score += score_fn(document_id, query_term_id, document_term_freq)
-            else:
-                score = query_document_similarity(query_term_ids, document_id, score_fn)
-
-            document_scores_and_ids.append((score, ext_doc_id))
-
-        data[query_id] = tuple(document_scores_and_ids)
+        # All score_fn _must_ return a list of tuples that has the following form: tuple(document_score, external_doc_id)
+        query_scores = score_fn(query_term_ids) # example: query_score = [(2, doc1), (200, doc3), (0, doc4)]
+        data[query_id] = tuple(query_scores)
 
     with open(run_out_path, 'w') as f_out:
         write_run(
@@ -295,6 +278,7 @@ def run_retrieval(model_name, score_fn, accumulate_score=True):
             max_objects_per_query=1000)
 
     print("Done writing results to run file")
+    return
 
 def cosine_similarity(vec_1, vec_2):
     print("Vec1: ", vec_1)
@@ -308,25 +292,25 @@ def idf(term_id):
 def tf_idf(term_id, document_term_freq):
     return log(1 + document_term_freq) * idf(term_id)
 
-def tfidf(_, query_term_id, document_term_freq):
+def score_tfidf(query_term_id):
     """
-    Scoring function for a document and a query term
+    Scoring function for a specific query, for all documents.
 
     :param int_document_id: the document id
     :param query_term_id: the query term id (assuming you have split the query to tokens)
     :param document_term_freq: the document term frequency of the query term
+    :returns A list of the form [(score_for_doc1, doc1_external_id), (score_for_doc5, doc5_external_id), ... ]
     """
-    # Some nice available dicts:
-    # token2id, id2token, id2df, id2tf
 
-    score = tf_idf(query_term_id, document_term_freq)
+    scores = []
+    for document_id in range(index.document_base(), index.maximum_document()):
+        ext_doc_id, _ = index.document(document_id)
+        score = query_document_similarity(query_term_id, document_id)
+        scores.append((score, ext_doc_id))
 
-    return score
+    return scores
 
-def score_tfidf_for_document(query_term_ids, document_id):
-    return query_document_similarity(query_term_ids, document_id, tfidf)
-
-def bm25(int_document_id, query_term_id, document_term_freq):
+def bm25(query_term_ids):
     """
     Scoring function for a document and a query term using the BM25 model
 
@@ -339,24 +323,33 @@ def bm25(int_document_id, query_term_id, document_term_freq):
     Do note that we leave the k_3 factor out, since all the queries
     in this assignment can be assumed to be reasonably short.
     """
-    # Parameters given by the assignment
+    def  bm25_formula(query_term_id, document_term_freq, l_d, l_average):
+        bm25_score = idf(query_term_id)*((k_1 + 1) * document_term_freq) / (k_1 * ((1-b) + b * (l_d/l_average)) + document_term_freq)
+        if bm25_score == 0:
+            return 0
+        return log(bm25_score)
+
     k_1 = 1.2
     b = 0.75
-    l_d = index.document_length(int_document_id)
     l_average = avg_doc_length
 
-    bm25_score = idf(query_term_id)*((k_1 + 1) * document_term_freq) / (k_1 * ((1-b) + b * (l_d/l_average)) + document_term_freq)
-    # Use log probabilities to avoid underflow
-    if bm25_score == 0:
-        return 0
+    scores = []
+    for document_id in range(index.document_base(), index.maximum_document()):
+        ext_doc_id, _ = index.document(document_id)
+        l_d = index.document_length(document_id)
+        score = 0
+        for query_term_id in query_term_ids:
+            document_term_freq = inverted_index[query_term_id][document_id]
+            score += bm25_formula(query_term_id, document_term_freq, l_d, l_average)
 
-    return log(bm25_score)
+        scores.append((score, ext_doc_id))
+
+    return scores
 
 # combining the two functions above:
 
-
-run_retrieval('tfidf', tfidf, accumulate_score=False)
-# run_retrieval('BM25', bm25)
+# run_retrieval('tfidf', score_tfidf)
+run_retrieval('BM25', bm25)
 
 
 # TODO implement the rest of the retrieval functions
