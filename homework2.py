@@ -18,6 +18,7 @@ import time
 
 from math import log
 
+from scipy import spatial
 
 def write_run(model_name, data, out_f,
               max_objects_per_query=sys.maxsize,
@@ -222,11 +223,31 @@ avg_doc_length = total_terms / num_documents
 print('Inverted index creation took', time.time() - start_time, 'seconds.')
 
 
-def run_retrieval(model_name, score_fn):
+def query_document_similarity(query_term_ids, document_id, score_fn):
+    """
+    Calculates the scores for both the query and the document given by the query_term_ids
+    and the document_id in light of the given score function. These scores are then
+    represented in a vector space where the axis is the query term, and
+    each vector is represented by the score for each term.
+    Finally we calculate the cosine similarity between the two vectors and return the value.
+
+    :param query_term_ids:
+    :param document_id:
+    :param score_fn:
+    :return:
+    """
+    # Assuming that words are not repeated in queries for now. TOOD: Remove assumption and do actual counts
+    query_vector = [tf_idf(query_term_id, 1/len(query_term_ids)) for query_term_id in query_term_ids]
+    document_vector = [score_fn(document_id, query_term_id, inverted_index[query_term_id][document_id]) for query_term_id in query_term_ids]
+    return cosine_similarity(query_vector, document_vector)
+
+def run_retrieval(model_name, score_fn, accumulate_score=True):
     """
     Runs a retrieval method for all the queries and writes the TREC-friendly results in a file.
     :param model_name: the name of the model (a string)
     :param score_fn: the scoring function (a function - see below for an example)
+    :param accumulate_score: boolean indicating weather the score for each term should be accumulated or not.
+    If accumulate_score is false, we will use the cosine similarity between document and query instead.
     """
     run_out_path = '{}.run'.format(model_name)
 
@@ -255,9 +276,12 @@ def run_retrieval(model_name, score_fn):
             # Accumulate the score for each query term.
             # TODO: Implement cosine similarity instead of just the accumulated sum
             score = 0
-            for query_term_id in query_term_ids:
-                document_term_freq = inverted_index[query_term_id][document_id]
-                score += score_fn(document_id, query_term_id, document_term_freq)
+            if accumulate_score:
+                for query_term_id in query_term_ids:
+                    document_term_freq = inverted_index[query_term_id][document_id]
+                    score += score_fn(document_id, query_term_id, document_term_freq)
+            else:
+                score = query_document_similarity(query_term_ids, document_id, score_fn)
 
             document_scores_and_ids.append((score, ext_doc_id))
 
@@ -272,6 +296,11 @@ def run_retrieval(model_name, score_fn):
 
     print("Done writing results to run file")
 
+def cosine_similarity(vec_1, vec_2):
+    print("Vec1: ", vec_1)
+    print(vec_2)
+    return 1 - spatial.distance.cosine(vec_1, vec_2)
+
 def idf(term_id):
     df_t = id2df[term_id]
     return log(total_number_of_documents) - log(df_t)
@@ -279,7 +308,7 @@ def idf(term_id):
 def tf_idf(term_id, document_term_freq):
     return log(1 + document_term_freq) * idf(term_id)
 
-def tfidf(int_document_id, query_term_id, document_term_freq):
+def tfidf(_, query_term_id, document_term_freq):
     """
     Scoring function for a document and a query term
 
@@ -294,6 +323,8 @@ def tfidf(int_document_id, query_term_id, document_term_freq):
 
     return score
 
+def score_tfidf_for_document(query_term_ids, document_id):
+    return query_document_similarity(query_term_ids, document_id, tfidf)
 
 def bm25(int_document_id, query_term_id, document_term_freq):
     """
@@ -324,8 +355,8 @@ def bm25(int_document_id, query_term_id, document_term_freq):
 # combining the two functions above:
 
 
-# run_retrieval('tfidf', tfidf)
-run_retrieval('BM25', bm25)
+run_retrieval('tfidf', tfidf, accumulate_score=False)
+# run_retrieval('BM25', bm25)
 
 
 # TODO implement the rest of the retrieval functions
