@@ -18,7 +18,7 @@ import time
 
 from math import log
 
-from scipy import spatial
+import numpy as np
 
 def write_run(model_name, data, out_f,
               max_objects_per_query=sys.maxsize,
@@ -222,6 +222,20 @@ avg_doc_length = total_terms / num_documents
 
 print('Inverted index creation took', time.time() - start_time, 'seconds.')
 
+def cosine_similarity(a, b):
+    """Takes 2 vectors a, b and returns the cosine similarity according
+    to the definition of the dot product
+    """
+    dot_product = np.dot(a, b)
+    norm_a = np.linalg.norm(a)
+    norm_b = np.linalg.norm(b)
+    res = dot_product / (norm_a * norm_b)
+    if np.isnan(res):
+        # If one of the vectors have zero length,
+        # we can not score the similarity between the two vectors, so we assume the worst
+        return -1
+
+    return res
 
 def query_document_similarity(query_term_ids, document_id):
     """
@@ -237,8 +251,9 @@ def query_document_similarity(query_term_ids, document_id):
     :return:
     """
     # Assuming that words are not repeated in queries for now. TOOD: Remove assumption and do actual counts
-    query_vector = [tf_idf(query_term_id, 1/len(query_term_ids)) for query_term_id in query_term_ids]
-    document_vector = [tf_idf(query_term_id, inverted_index[query_term_id][document_id]) for query_term_id in query_term_ids]
+
+    query_vector = np.array([tf_idf(query_term_id, 1/len(query_term_ids)) for query_term_id in query_term_ids])
+    document_vector = np.array([tf_idf(query_term_id, inverted_index[query_term_id][document_id]) for query_term_id in query_term_ids])
     return cosine_similarity(query_vector, document_vector)
 
 def run_retrieval(model_name, score_fn):
@@ -280,11 +295,6 @@ def run_retrieval(model_name, score_fn):
     print("Done writing results to run file")
     return
 
-def cosine_similarity(vec_1, vec_2):
-    print("Vec1: ", vec_1)
-    print(vec_2)
-    return 1 - spatial.distance.cosine(vec_1, vec_2)
-
 def idf(term_id):
     df_t = id2df[term_id]
     return log(total_number_of_documents) - log(df_t)
@@ -306,6 +316,7 @@ def score_tfidf(query_term_id):
     for document_id in range(index.document_base(), index.maximum_document()):
         ext_doc_id, _ = index.document(document_id)
         score = query_document_similarity(query_term_id, document_id)
+        print("tfidf score:", score)
         scores.append((score, ext_doc_id))
 
     return scores
@@ -323,7 +334,7 @@ def bm25(query_term_ids):
     Do note that we leave the k_3 factor out, since all the queries
     in this assignment can be assumed to be reasonably short.
     """
-    def  bm25_formula(query_term_id, document_term_freq, l_d, l_average):
+    def bm25_formula(query_term_id, document_term_freq, l_d, l_average):
         bm25_score = idf(query_term_id)*((k_1 + 1) * document_term_freq) / (k_1 * ((1-b) + b * (l_d/l_average)) + document_term_freq)
         if bm25_score == 0:
             return 0
@@ -348,8 +359,8 @@ def bm25(query_term_ids):
 
 # combining the two functions above:
 
-# run_retrieval('tfidf', score_tfidf)
-run_retrieval('BM25', bm25)
+run_retrieval('tfidf', score_tfidf)
+# run_retrieval('BM25', bm25)
 
 
 # TODO implement the rest of the retrieval functions
