@@ -16,9 +16,11 @@ import pyndri
 
 import time
 
-from math import log, exp, cos, pi, sqrt
+from math import log
 
 import numpy as np
+
+from PLM import PLM_score
 
 def write_run(model_name, data, out_f,
               max_objects_per_query=sys.maxsize,
@@ -222,6 +224,20 @@ avg_doc_length = total_terms / num_documents
 
 print('Inverted index creation took', time.time() - start_time, 'seconds.')
 
+# tf_C = collections.defaultdict(lambda: 1)
+print("Creating tf_c")
+
+# tf_C = collections.Counter()
+tf_C = collections.defaultdict(lambda: 1)
+print("Number of query term ids: ", len(query_term_ids))
+for term_id in query_term_ids:
+    for document_id in range(index.document_base(), index.maximum_document()):
+        tf_C[term_id] += inverted_index[term_id][document_id]
+    print("Length", len(tf_C.keys()))
+    print(sys.getsizeof(tf_C))
+
+print("Done creating tf_C")
+
 def cosine_similarity(a, b):
     """Takes 2 vectors a, b and returns the cosine similarity according
     to the definition of the dot product
@@ -276,6 +292,11 @@ def run_retrieval(model_name, score_fn, max_objects_per_query=1000):
     # The dictionary data should have the form: query_id --> (document_score, external_doc_id)
     data = {}
 
+    if model_name == "PLM":
+        # Should probably just make this one of the global variables
+        query_model = generate_query_likelihood_model()
+        print("Done creating query_model")
+
     for i, query in enumerate(queries.items()):
         print("Scoring query {} out of {} queries".format(i, len(queries)))
         query_id, _ = query
@@ -284,11 +305,19 @@ def run_retrieval(model_name, score_fn, max_objects_per_query=1000):
         query_scores = []
 
         for document_id in range(index.document_base(), index.maximum_document()):
-            ext_doc_id, _ = index.document(document_id)
+            ext_doc_id, document_word_positions = index.document(document_id)
             score = 0
-            for query_term_id in query_term_ids:
-                document_term_frequency = inverted_index[query_term_id][document_id]
-                score += score_fn(document_id, query_term_id, document_term_frequency)
+            if model_name == "PLM": # PLMs need the query in it's entirety
+                document_length = index.document_length(document_id)
+                plm = PLM_score(query_term_ids, document_length, total_number_of_documents, document_word_positions, query_model, tf_C)
+                score = plm.best_position_strategy_score()
+                print("Score:", score)
+
+            else:
+                for query_term_id in query_term_ids:
+                    document_term_frequency = inverted_index[query_term_id][document_id]
+                    score += score_fn(document_id, query_term_id, document_term_frequency)
+
             query_scores.append((score, ext_doc_id))
 
         data[query_id] = list(sorted(query_scores, reverse=True))[:max_objects_per_query]
@@ -302,6 +331,23 @@ def run_retrieval(model_name, score_fn, max_objects_per_query=1000):
 
     print("Done writing results to run file")
     return
+
+def generate_query_likelihood_model():
+    counter = collections.Counter()
+
+    for query in queries.items():
+        query_id, _ = query
+        query_term_ids = tokenized_queries[query_id]
+
+        for query_term_id in query_term_ids:
+            counter[query_term_id] += 1
+
+    total_elements = len(counter.items())
+    model = {query_term_id : count / total_elements for query_term_id, count in counter.items()}
+    # If a term has never been a part of a query we assign it probability 0 in the query model
+    model = collections.defaultdict(int, model)
+    return model
+
 
 def idf(term_id):
     df_t = id2df[term_id]
@@ -343,34 +389,8 @@ def bm25(document_id, term_id, document_term_freq):
 # combining the two functions above:
 
 # run_retrieval('tfidf', tf_idf)
-run_retrieval('BM25', bm25)
-
-# Positional language model
-
-def pos_lang_model_score(document_id, term_id, document_term_freq):
-    def c(word_id, i, word_positions):
-        # A simple function to check if
-        # the word with word id = word_id is at position i in the given document
-        return word_positions[i] == word_id
-
-    def k_passage(i, j, rho):
-        return 1 if abs(i - j) <= rho else 0
-
-    def k_gaussian(i, j, rho):
-        return exp(-((i-j)**2) / (2 * (rho**2)))
-
-    def k_triangle(i, j, rho):
-        return 1 - (abs(i - j) / rho) if abs(i - j) <= rho else 0
-
-    def k_triangle(i, j, rho):
-        return 0.5 * (1 + cos((abs(i - j) * pi)/rho)) if abs(i - j) <= rho else 0
-
-    def k_circle(i, j, rho):
-        return sqrt(1 - ((abs(i - j) / rho))**2) if abs(i - j) <= rho else 0
-
-    word_positions = index.document(document_id)[0]
-
-    pass
+# run_retrieval('BM25', bm25)
+run_retrieval('PLM', None)
 
 
 # TODO implement the rest of the retrieval functions
