@@ -227,14 +227,12 @@ print('Inverted index creation took', time.time() - start_time, 'seconds.')
 # tf_C = collections.defaultdict(lambda: 1)
 print("Creating tf_c")
 
-# tf_C = collections.Counter()
-tf_C = collections.defaultdict(lambda: 1)
+tf_C = collections.Counter()
+# tf_C = collections.defaultdict(lambda: 1)
 print("Number of query term ids: ", len(query_term_ids))
 for term_id in query_term_ids:
     for document_id in range(index.document_base(), index.maximum_document()):
         tf_C[term_id] += inverted_index[term_id][document_id]
-    print("Length", len(tf_C.keys()))
-    print(sys.getsizeof(tf_C))
 
 print("Done creating tf_C")
 
@@ -295,7 +293,6 @@ def run_retrieval(model_name, score_fn, max_objects_per_query=1000):
     if model_name == "PLM":
         # Should probably just make this one of the global variables
         query_model = generate_query_likelihood_model()
-        print("Done creating query_model")
 
     for i, query in enumerate(queries.items()):
         print("Scoring query {} out of {} queries".format(i, len(queries)))
@@ -308,10 +305,10 @@ def run_retrieval(model_name, score_fn, max_objects_per_query=1000):
             ext_doc_id, document_word_positions = index.document(document_id)
             score = 0
             if model_name == "PLM": # PLMs need the query in it's entirety
+                print("Scoring document {} out of {} documents".format(document_id, index.maximum_document()))
                 document_length = index.document_length(document_id)
-                plm = PLM_score(query_term_ids, document_length, total_number_of_documents, document_word_positions, query_model, tf_C)
+                plm = PLM_score(query_term_ids, document_length, total_number_of_documents, document_word_positions, query_model, None)
                 score = plm.best_position_strategy_score()
-                print("Score:", score)
 
             else:
                 for query_term_id in query_term_ids:
