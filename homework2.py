@@ -345,7 +345,6 @@ def generate_query_likelihood_model():
     model = collections.defaultdict(int, model)
     return model
 
-
 def idf(term_id):
     df_t = id2df[term_id]
     return log(total_number_of_documents) - log(df_t)
@@ -383,7 +382,11 @@ def bm25(document_id, term_id, document_term_freq):
 
     return bm25_formula(term_id, document_term_freq, l_d, l_average)
 
-# combining the two functions above:
+def absolute_discounting(document_id, term_id, document_term_freq):
+    discount = 0.5
+    d = index.document_length(document_id)
+    number_of_unique_terms = len(set(index.document(document_id)[1]))
+    return max(document_term_freq - discount, 0) / d + ((discount * number_of_unique_terms) / d) * tf_C[term_id]
 
 # run_retrieval('tfidf', tf_idf)
 # run_retrieval('BM25', bm25)
