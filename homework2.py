@@ -250,16 +250,23 @@ def bm25(int_document_id, query_term_id, document_term_freq):
     bm25 = idf(query_term_id, num_documents)*((k_1 + 1) * tf) / (k_1 * ((1-b) + b * (l_d/l_avg)) + tf)
     return bm25
 
+tf_C = collections.defaultdict(int)
+
+for term_id in query_term_ids:
+    for document_id in range(index.document_base(), index.maximum_document()):
+        tf_C[term_id] += inverted_index[term_id][document_id]
+
+
 def LM_jelinek_mercer_smoothing(int_document_id, query_term_id, document_term_freq):
     tf = document_term_freq
     lamb = 0.1
     doc_length = index.document_length(int_document_id)
     C = num_documents
-    tf_C = 0
-    for document_id in range(index.document_base(), index.maximum_document()):
-        tf_C += inverted_index[query_term_id][document_id]
 
-    prob_q_d = lamb * (tf / doc_length) + (1 - lamb) * (tf_C / C)
+    try:
+        prob_q_d = lamb * (tf / doc_length) + (1 - lamb) * (tf_C[query_term_id] / C)
+    except ZeroDivisionError as err:
+        prob_q_d = 0
 
     return prob_q_d
 
@@ -268,19 +275,31 @@ def LM_dirichelt_smoothing(int_document_id, query_term_id, document_term_freq):
     mu = 500
     doc_length = index.document_length(int_document_id)
     C = num_documents
-    tf_C = 0
-    for document_id in range(index.document_base(), index.maximum_document()):
-        tf_C += inverted_index[query_term_id][document_id]
 
-    prob_q_d = (tf + mu * (tf_C / C)) / (doc_length + mu)
+    prob_q_d = (tf + mu * (tf_C[query_term_id] / C)) / (doc_length + mu)
+
+    return prob_q_d
+
+def LM_absolute_discounting(int_document_id, query_term_id, document_term_freq):
+    delta = 0.1
+    doc_length = index.document_length(int_document_id)
+    document = index.document(index.document_base())
+    num_unique_terms = len(set(document[1]))
+    C = num_documents
+
+    try:
+        prob_q_d = max(document_term_freq - delta, 0)/doc_length + ((delta * num_unique_terms)/doc_length) * (tf_C[query_term_id]/C)
+    except ZeroDivisionError as err:
+        prob_q_d = 0 
 
     return prob_q_d
 
 # combining the two functions above:
 # run_retrieval('tfidf', tfidf)
 # run_retrieval('bm25', bm25)
-run_retrieval('LM_jelinek_mercer_smoothing', LM_jelinek_mercer_smoothing)
+# run_retrieval('LM_jelinek_mercer_smoothing', LM_jelinek_mercer_smoothing)
 # run_retrieval('LM_dirichelt_smoothing', LM_dirichelt_smoothing)
+run_retrieval('LM_absolute_discounting', LM_absolute_discounting)
 
 
 # # TODO implement the rest of the retrieval functions
