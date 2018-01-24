@@ -16,7 +16,7 @@ import pyndri
 
 import time
 
-from math import log
+from math import log, exp, cos, pi, sqrt
 
 import numpy as np
 
@@ -233,7 +233,7 @@ def cosine_similarity(a, b):
     if np.isnan(res):
         # If one of the vectors have zero length,
         # we can not score the similarity between the two vectors, so we assume the worst
-        return -1
+        return 0.0
 
     return res
 
@@ -281,8 +281,16 @@ def run_retrieval(model_name, score_fn, max_objects_per_query=1000):
         query_id, _ = query
         query_term_ids = tokenized_queries[query_id]
 
-        # All score_fn _must_ return a list of tuples that has the following form: tuple(document_score, external_doc_id)
-        query_scores = score_fn(query_term_ids) # example: query_score = [(2, doc1), (200, doc3), (0, doc4)]
+        query_scores = []
+
+        for document_id in range(index.document_base(), index.maximum_document()):
+            ext_doc_id, _ = index.document(document_id)
+            score = 0
+            for query_term_id in query_term_ids:
+                document_term_frequency = inverted_index[query_term_id][document_id]
+                score += score_fn(document_id, query_term_id, document_term_frequency)
+            query_scores.append((score, ext_doc_id))
+
         data[query_id] = list(sorted(query_scores, reverse=True))[:max_objects_per_query]
 
     with open(run_out_path, 'w') as f_out:
@@ -299,65 +307,70 @@ def idf(term_id):
     df_t = id2df[term_id]
     return log(total_number_of_documents) - log(df_t)
 
-def tf_idf(term_id, document_term_freq):
+def tf_idf(_, term_id, document_term_freq):
     return log(1 + document_term_freq) * idf(term_id)
 
-def score_tfidf(query_term_id):
+def bm25(document_id, term_id, document_term_freq):
     """
-    Scoring function for a specific query, for all documents.
-
-    :param query_term_ids: A list of the query terms that consitutes the given query
-    :returns: A list of tuples scoring all documents
-    """
-
-    scores = []
-    for document_id in range(index.document_base(), index.maximum_document()):
-        ext_doc_id, _ = index.document(document_id)
-        score = query_document_similarity(query_term_id, document_id)
-        scores.append((score, ext_doc_id))
-
-    return scores
-
-def bm25(query_term_ids):
-    """
-    Scoring function for a list of query terms, using the BM25 model.
-    Returns the score for all documents in the light of this query.
-
-    :param query_term_ids: A list of the query terms that consitutes the given query
-    :returns: A list of tuples scoring all documents
+    :param document_id:
+    :param term_id:
+    :param document_term_freq: How many times this term appears in the given document
+    :returns: A score for the given document in the light of the given query term
 
     Since all the scoring functions are supposed to only score one query term,
     the BM25 summation is being done outside this function.
     Do note that we leave the k_3 factor out, since all the queries
     in this assignment can be assumed to be reasonably short.
     """
+
     def bm25_formula(query_term_id, document_term_freq, l_d, l_average):
-        bm25_score = idf(query_term_id)*((k_1 + 1) * document_term_freq) / (k_1 * ((1-b) + b * (l_d/l_average)) + document_term_freq)
+        enumerator = (k_1 + 1) * document_term_freq
+        denominator = k_1 * ((1-b) + b * (l_d/l_average)) + document_term_freq
+        bm25_score = idf(query_term_id)* enumerator/denominator
+
         if bm25_score == 0:
             return 0
+
         return log(bm25_score)
 
     k_1 = 1.2
     b = 0.75
     l_average = avg_doc_length
+    l_d = index.document_length(document_id)
 
-    scores = []
-    for document_id in range(index.document_base(), index.maximum_document()):
-        ext_doc_id, _ = index.document(document_id)
-        l_d = index.document_length(document_id)
-        score = 0
-        for query_term_id in query_term_ids:
-            document_term_freq = inverted_index[query_term_id][document_id]
-            score += bm25_formula(query_term_id, document_term_freq, l_d, l_average)
-
-        scores.append((score, ext_doc_id))
-
-    return scores
+    return bm25_formula(term_id, document_term_freq, l_d, l_average)
 
 # combining the two functions above:
 
-# run_retrieval('tfidf', score_tfidf)
+# run_retrieval('tfidf', tf_idf)
 run_retrieval('BM25', bm25)
+
+# Positional language model
+
+def pos_lang_model_score(document_id, term_id, document_term_freq):
+    def c(word_id, i, word_positions):
+        # A simple function to check if
+        # the word with word id = word_id is at position i in the given document
+        return word_positions[i] == word_id
+
+    def k_passage(i, j, rho):
+        return 1 if abs(i - j) <= rho else 0
+
+    def k_gaussian(i, j, rho):
+        return exp(-((i-j)**2) / (2 * (rho**2)))
+
+    def k_triangle(i, j, rho):
+        return 1 - (abs(i - j) / rho) if abs(i - j) <= rho else 0
+
+    def k_triangle(i, j, rho):
+        return 0.5 * (1 + cos((abs(i - j) * pi)/rho)) if abs(i - j) <= rho else 0
+
+    def k_circle(i, j, rho):
+        return sqrt(1 - ((abs(i - j) / rho))**2) if abs(i - j) <= rho else 0
+
+    word_positions = index.document(document_id)[0]
+
+    pass
 
 
 # TODO implement the rest of the retrieval functions
