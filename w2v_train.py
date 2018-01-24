@@ -77,11 +77,11 @@ def load_word2vec_model(path, to_train=False):
 
 
 WORD_EMBEDDING_PARAMS = {
-    "alpha": 0.000025,  # Learning rate
+    "alpha": 0.025,  # Learning rate
     "size": 300,  # Embedding size
     "window": 5,  # One-sided window size
     "sg": True,  # Skip-gram.
-    "min_count": 5,  # Minimum word frequency.
+    "min_count": 10,  # Minimum word frequency.
     "sample": 1e-3,  # Sub-sample threshold.
     "hs": False,  # Hierarchical softmax.
     "negative": 10,  # Number of negative examples.
