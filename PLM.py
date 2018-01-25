@@ -1,20 +1,20 @@
 from math import log, exp, cos, pi, sqrt
-
+import numpy as np
 
 
 class PLM_score:
     # OBS: PLMs need the entire query to score a document. Just the query term_id is not sufficient
-    def __init__(self, query_term_ids, document_length, total_number_of_documents, word_positions, query_model, background_model, sigma=50):
+    def __init__(self, query_term_ids, document_length, total_number_of_documents, word_positions,
+                 background_model, kernel, query_word_positions):
         self.query_term_ids = query_term_ids
         self.document_length = document_length
         self.C = total_number_of_documents
         self.word_positions = word_positions
-        self.query_model = query_model # A model of the form query_model[term_id] = probability of term_id given all queries
+        self.query_word_positions = query_word_positions
         self.background_model = background_model # A (preferably smoothed) language model of the form back_model[term_id] = counts of the term
-        self.sigma = sigma
-        self.kernel_func = self.k_gaussian # Set the desired kernel function
+        self.kernel = kernel
         self.c_marked_memory = {} # Attempt to make a memory of the values we've already caluclated so we don't have to re-calculate them
-        self.c_m_total_memory = {}
+        self.c_m_total_memory = dict()
         self.k_cache = dict()
         self.position_indices = list(range(document_length))
 
@@ -24,26 +24,6 @@ class PLM_score:
         # the word with word id = word_id is at position i in the given document
         return self.word_positions[i] == term_id
 
-    def k_passage(self, i, j):
-        if i - j not in self.k_cache:
-            self.k_cache[i - j] = 1 if abs(i - j) <= self.sigma else 0
-        return self.k_cache[i - j]
-
-    def k_gaussian(self, i, j):
-        if i-j not in self.k_cache:
-            self.k_cache[i-j] = exp(-((i-j)**2) / (2 * (self.sigma ** 2)))
-        return self.k_cache[i-j]
-
-    def k_triangle(self, i, j):
-        if i - j not in self.k_cache:
-            self.k_cache[i - j] = 1 - (abs(i - j) / self.sigma) if abs(i - j) <= self.sigma else 0
-        return self.k_cache[i-j]
-
-    def k_circle(self, i, j):
-        if i - j not in self.k_cache:
-            self.k_cache[i - j] = sqrt(1 - ((abs(i - j) / self.sigma)) ** 2) if abs(i - j) <= self.sigma else 0
-        return self.k_cache[i-j]
-
     def c_marked(self, term_id, i):
         if (term_id, i) in self.c_marked_memory:
             return self.c_marked_memory[(term_id, i)]
@@ -52,39 +32,44 @@ class PLM_score:
             self.c_marked_memory[(term_id, i)] = c_m
             return c_m
 
-    def c_m_total(self, term_id, i):
-        if (term_id, i) in self.c_m_total_memory:
-            return self.c_m_total_memory[(term_id, i)]
-        else:
-            c_m_total = sum([self.kernel_func(i, j) for j in self.position_indices])
-            self.c_m_total_memory[(term_id, i)] = c_m_total
-            return c_m_total
+    def c_m_total(self, i):
+        if i not in self.c_m_total_memory:
+            self.c_m_total_memory[i] = sum([self.kernel_func(i, j) for j in self.position_indices])
+        return self.c_m_total_memory[i]
 
     def p_w_D_i(self, term_id, i):
+        # TODO Refactor
         c_m = self.c_marked(term_id, i)
         # We use the simplification that the sum over all words is simply the sum of the kernel function
-        c_m_tot = self.c_m_total(term_id, i)
+        c_m_tot = self.c_m_total(i)
         return c_m / c_m_tot
 
     def p_w_D_i_smoothed(self, term_id, i, lamb=0.5):  # Dirichlet smoothing
-        Z_i = self.c_m_total(term_id, i)
+        # TODO Refactor
+        Z_i = self.c_m_total(i)
         return (self.c_marked(term_id, i) + lamb * self.background_model[term_id]) / (Z_i + lamb)
 
     def S(self, i):
         score = 0
-        for term_id in set(self.word_positions):  # Iterate over the vocabulary of the document
-            if term_id != 0:  # Don't consider stop words
-                query_prob = self.query_model[term_id]
-                if query_prob == 0:
-                    continue
+        for query_term_id in self.query_term_ids:  # Iterate over the vocabulary of the document
+            query_prob = sum([1 for q_id in self.query_term_ids if query_term_id == q_id ]) / len(self.query_term_ids)
 
-                pwdi = self.p_w_D_i(term_id, i) if not self.background_model else self.p_w_D_i_smoothed(term_id, i)
+            pwdi = self.p_w_D_i(query_term_id, i) \
+                if not self.background_model else self.p_w_D_i_smoothed(query_term_id, i)
 
-                if pwdi != 0:
-                    score += -query_prob * log(query_prob / pwdi)
+            if pwdi != 0:
+                score += -query_prob * log(query_prob / pwdi)
 
         return score
 
     def best_position_strategy_score(self):
+        counts = np.zeros(len(self.document_length))
+        counts[self.query_word_positions] = 1
+
+        # TODO: Add kernel values
+        for position in self.query_word_positions:
+            pass
+
+
         return max([self.S(i) for i in self.position_indices])
 
