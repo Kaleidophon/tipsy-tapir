@@ -229,12 +229,16 @@ print("Creating tf_c")
 
 tf_C = collections.Counter()
 # tf_C = collections.defaultdict(lambda: 1)
+
+document_ids = list(range(index.document_base(), index.maximum_document()))
 print("Number of query term ids: ", len(query_term_ids))
 for term_id in query_term_ids:
-    for document_id in range(index.document_base(), index.maximum_document()):
+    for document_id in document_ids:
+        #term = inverted_index[term_id][document_id]
         tf_C[term_id] += inverted_index[term_id][document_id]
 
 print("Done creating tf_C")
+
 
 def cosine_similarity(a, b):
     """Takes 2 vectors a, b and returns the cosine similarity according
@@ -247,9 +251,10 @@ def cosine_similarity(a, b):
     if np.isnan(res):
         # If one of the vectors have zero length,
         # we can not score the similarity between the two vectors, so we assume the worst
-        return 0.0
+        return 0.0  # TODO Isn't worst case -1?? Dennis
 
     return res
+
 
 def query_document_similarity(query_term_ids, document_id):
     """
@@ -270,7 +275,8 @@ def query_document_similarity(query_term_ids, document_id):
     document_vector = np.array([tf_idf(query_term_id, inverted_index[query_term_id][document_id]) for query_term_id in query_term_ids])
     return cosine_similarity(query_vector, document_vector)
 
-def run_retrieval(model_name, score_fn, max_objects_per_query=1000):
+
+def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000):
     """
     Runs a retrieval method for all the queries and writes the TREC-friendly results in a file.
     :param model_name: the name of the model (a string)
@@ -301,7 +307,9 @@ def run_retrieval(model_name, score_fn, max_objects_per_query=1000):
 
         query_scores = []
 
-        for document_id in range(index.document_base(), index.maximum_document()):
+        for document_id in document_ids:
+
+            if document_id == 10: return
             ext_doc_id, document_word_positions = index.document(document_id)
             score = 0
             if model_name == "PLM": # PLMs need the query in it's entirety
@@ -329,6 +337,7 @@ def run_retrieval(model_name, score_fn, max_objects_per_query=1000):
     print("Done writing results to run file")
     return
 
+
 def generate_query_likelihood_model():
     counter = collections.Counter()
 
@@ -345,12 +354,15 @@ def generate_query_likelihood_model():
     model = collections.defaultdict(int, model)
     return model
 
+
 def idf(term_id):
     df_t = id2df[term_id]
     return log(total_number_of_documents) - log(df_t)
 
+
 def tf_idf(_, term_id, document_term_freq):
     return log(1 + document_term_freq) * idf(term_id)
+
 
 def bm25(document_id, term_id, document_term_freq):
     """
@@ -382,6 +394,7 @@ def bm25(document_id, term_id, document_term_freq):
 
     return bm25_formula(term_id, document_term_freq, l_d, l_average)
 
+
 def absolute_discounting(document_id, term_id, document_term_freq):
     discount = 0.1
     d = index.document_length(document_id)
@@ -391,8 +404,9 @@ def absolute_discounting(document_id, term_id, document_term_freq):
 
 # run_retrieval('tfidf', tf_idf)
 # run_retrieval('BM25', bm25)
-# run_retrieval('PLM', None)
-run_retrieval('absolute_discounting', absolute_discounting)
+import cProfile as profile
+
+profile.run("run_retrieval('PLM', None, document_ids=document_ids)", sort=True)
 
 
 # TODO implement the rest of the retrieval functions
