@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import time
 
 
-def train_word_embeddings(sentences, epochs, epsilon=None, **model_parameters):
+def train_word_embeddings(sentences, epochs, epsilon=None, save_path=None, **model_parameters):
     logging.info('Constructing word2vec vocabulary.')
     word2vec_init = gensim.models.Word2Vec(**model_parameters)
 
@@ -23,7 +23,7 @@ def train_word_embeddings(sentences, epochs, epsilon=None, **model_parameters):
         logging.info('Epoch %d', epoch)
         start = time.time()
 
-        model = copy.deepcopy(models[-1])
+        model = copy.deepcopy(models.pop())
         model.train(sentences, compute_loss=True, epochs=model.iter, total_examples=len(sentences))
 
         end = time.time()
@@ -34,11 +34,14 @@ def train_word_embeddings(sentences, epochs, epsilon=None, **model_parameters):
         logging.info("Loss epoch #{}: {}".format(epoch, current_loss))
         models.append(model)
 
-        if epsilon is not None and epoch > 0:
+        if epsilon is not None and epoch > 1:
             # Check convergence criterion
             if np.abs(current_loss - last_loss) < epsilon:
                 logging.info("Training stopped after convergence criterion was reached in epoch #{}.".format(epoch))
                 break
+
+        if save_path is not None:
+            save_word2vec_model(models[-1], save_path)
 
         last_loss = current_loss
 
@@ -86,7 +89,7 @@ def plot_losses(losses, epochs):
 
 
 if __name__ == "__main__":
-    EPOCHS = 3
+    EPOCHS = 60
     WORD_EMBEDDING_PARAMS = {
         "size": 300,  # Embedding size
         "window": 5,  # One-sided window size
@@ -106,6 +109,7 @@ if __name__ == "__main__":
     logging.info('Loading vocabulary.')
     sentences = build_sentences(index)
 
-    w2v_models, losses = train_word_embeddings(sentences, epochs=EPOCHS, **WORD_EMBEDDING_PARAMS)
-    save_word2vec_model(w2v_models[-1], "./w2v_test")
+    w2v_models, losses = train_word_embeddings(
+        sentences, epochs=EPOCHS, epsilon=100, save_path="./w2v_60", **WORD_EMBEDDING_PARAMS
+    )
     plot_losses(losses, EPOCHS)
