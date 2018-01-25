@@ -383,14 +383,16 @@ def bm25(document_id, term_id, document_term_freq):
     return bm25_formula(term_id, document_term_freq, l_d, l_average)
 
 def absolute_discounting(document_id, term_id, document_term_freq):
-    discount = 0.5
+    discount = 0.1
     d = index.document_length(document_id)
+    if d == 0: return 0
     number_of_unique_terms = len(set(index.document(document_id)[1]))
-    return max(document_term_freq - discount, 0) / d + ((discount * number_of_unique_terms) / d) * tf_C[term_id]
+    return max(document_term_freq - discount, 0) / d + ((discount * number_of_unique_terms) / d) * (tf_C[term_id] / total_number_of_documents)
 
 # run_retrieval('tfidf', tf_idf)
 # run_retrieval('BM25', bm25)
-run_retrieval('PLM', None)
+# run_retrieval('PLM', None)
+run_retrieval('absolute_discounting', absolute_discounting)
 
 
 # TODO implement the rest of the retrieval functions

@@ -32,24 +32,14 @@ class PLM_score():
         self.background_model = background_model # A (preferably smoothed) language model of the form back_model[term_id] = counts of the term
         self.rho = rho
         self.kernel_func = self.k_gaussian # Set the desired kernel function
-        self.c_marked_memory = {} # Attempt to make a memory of the values we've already caluclated so we don't have to re-calculate them
-        self.c_m_total_memory = {}
 
     def c_marked(self, term_id, i):
-        if (term_id, i) in self.c_marked_memory:
-            return self.c_marked_memory[(term_id, i)]
-        else:
-            c_m = sum([self.c(term_id, i) * self.kernel_func(i, j) for j in range(self.document_length)])
-            self.c_marked_memory[(term_id, i)] = c_m
-            return c_m
+        c_m = sum([self.c(term_id, i) * self.kernel_func(i, j) for j in range(self.document_length)])
+        return c_m
 
     def c_m_total(self, term_id, i):
-        if (term_id, i) in self.c_m_total_memory:
-            return self.c_m_total_memory[(term_id, i)]
-        else:
-            c_m_total = sum([self.kernel_func(i, j) for j in range(self.document_length)])
-            self.c_m_total_memory[(term_id, i)] = c_m_total
-            return c_m_total
+        c_m_total = sum([self.kernel_func(i, j) for j in range(self.document_length)])
+        return c_m_total
 
     def p_w_D_i(self, term_id, i):
         c_m = self.c_marked(term_id, i)
