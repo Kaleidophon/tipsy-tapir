@@ -20,7 +20,7 @@ from math import log
 
 import numpy as np
 
-from PLM import PLM_score
+from PLM import PLM
 from kernels import k_gaussian
 
 def write_run(model_name, data, out_f,
@@ -230,7 +230,7 @@ print("Creating tf_c")
 
 tf_C = collections.Counter()
 # Query term id + document id -> Position of that term within the doc
-query_word_positions = collections.defaultdict(lambda: collections.defaultdict(list))
+query_word_positions = collections.defaultdict(list)
 # tf_C = collections.defaultdict(lambda: 1)
 
 document_ids = list(range(index.document_base(), index.maximum_document()))
@@ -240,7 +240,7 @@ for document_id in document_ids:
 
     for pos, id_at_pos in enumerate(positions):
         if pos in query_term_ids:
-            query_word_positions[id_at_pos][document_id].append(pos)
+            query_word_positions[document_id].append(pos)
 
     for term_id in query_term_ids:
         #term = inverted_index[term_id][document_id]
@@ -318,8 +318,6 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
         query_scores = []
 
         for document_id in document_ids:
-
-            if document_id == 10: return
             ext_doc_id, document_word_positions = index.document(document_id)
             score = 0
             if model_name == "PLM":  # PLMs need the query in it's entirety
@@ -329,11 +327,11 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
 
                 print("Scoring document {} out of {} documents".format(document_id, index.maximum_document()))
                 document_length = index.document_length(document_id)
-                plm = PLM_score(
-                    query_term_ids, document_length, total_number_of_documents, document_word_positions,
-                    query_model, background_model=None, kernel=kernel
+                plm = PLM(
+                    query_term_ids, document_length, total_number_of_documents, query_word_positions[document_id],
+                    background_model=None, kernel=kernel
                 )
-                score = plm.best_position_strategy_score(query_term_ids)
+                score = plm.best_position_strategy_score()
                 print("Score: ", score)
 
             else:

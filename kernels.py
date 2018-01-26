@@ -2,9 +2,10 @@ import numpy as np
 
 
 def plm_kernel(sigma, func):
-    k = np.zeros(2 * sigma)
-    for j in range(len(k)):
-        k[sigma - j] = func(sigma, j)
+    k = np.zeros(2 * sigma + 1)
+    for j in range(sigma):
+        k[j] = k[-(j + 1)] = func(sigma, j)  # Symmetry
+    k[sigma] = 1  # Always one at actual position
     return k
 
 
