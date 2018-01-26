@@ -13,7 +13,7 @@ def plot_ndcg_for_model(filename_prefix, parameters, paramterer_name):
         with open("{}_{}.txt".format(filename_prefix, param), "r") as f:
             for line in f.readlines():
                 value_name, _, value = line.split()
-                if value_name == "ndcg":
+                if value_name == "ndcg_cut_10":
                     ndcg_values.append(float(value))
     plot(parameters, ndcg_values, paramterer_name, "NDCG")
 
