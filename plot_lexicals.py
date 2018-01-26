@@ -16,6 +16,7 @@ def plot_ndcg_for_model(filename_prefix, filename_suffix, parameters, paramterer
                 if value_name == "ndcg_cut_10":
                     ndcg_values.append(float(value))
     plot(parameters, ndcg_values, paramterer_name, "NDCG")
+    return ndcg_values
 
 def get_relevant_values_for_model(filename, requested_values):
     values = {}
@@ -55,13 +56,20 @@ print_model_values(bm25_values)
 ### Models with varying paramters ###
 
 # Jelinek-Mercer
-
-# Test that it works and plot the values
 jel_params = [0.1, 0.3, 0.5, 0.7, 0.9]
-plot_ndcg_for_model("jelinek_mercer", "validationset", jel_params, "lambda")
+jel_ndcg_values = plot_ndcg_for_model("jelinek_mercer", "validationset", jel_params, "lambda")
+print("JM values:")
+print(jel_ndcg_values)
 
-# Dirichlet prior
+# dirichlet prior
+dir_params = [500, 1000, 1500]
+dir_ndcg_values = plot_ndcg_for_model("dirichlet_mu", "validationset", dir_params, "mu")
+print("Dirichlet values:")
+print(dir_ndcg_values)
 
 # Absolute discounting
+abs_ndcg_values = plot_ndcg_for_model("abs_disc_delta", "validationset", jel_params, "delta")
+print("Absolute disc values:")
+print(abs_ndcg_values)
 
 # PLM
