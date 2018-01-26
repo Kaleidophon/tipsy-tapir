@@ -1,7 +1,6 @@
 from math import log, exp, cos, pi, sqrt
 import numpy as np
 
-
 class PLM:
     # OBS: PLMs need the entire query to score a document. Just the query term_id is not sufficient
     def __init__(self, query_term_ids, document_length, total_number_of_documents, query_term_positions,

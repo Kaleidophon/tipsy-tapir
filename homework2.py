@@ -186,7 +186,7 @@ query_term_ids = set(
 
 print('Gathering statistics about', len(query_term_ids), 'terms.')
 
-# inverted index creation.
+inverted index creation.
 start_time = time.time()
 
 document_lengths = {}
@@ -284,7 +284,6 @@ def query_document_similarity(query_term_ids, document_id):
     document_vector = np.array([tf_idf(query_term_id, inverted_index[query_term_id][document_id]) for query_term_id in query_term_ids])
     return cosine_similarity(query_vector, document_vector)
 
-
 def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000, **retrieval_func_params):
     """
     Runs a retrieval method for all the queries and writes the TREC-friendly results in a file.
@@ -337,7 +336,7 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
             else:
                 for query_term_id in query_term_ids:
                     document_term_frequency = inverted_index[query_term_id][document_id]
-                    score += score_fn(document_id, query_term_id, document_term_frequency)
+                    score += score_fn(document_id, query_term_id, document_term_frequency, tuning_parameter=tuning_parameter)
 
             query_scores.append((score, ext_doc_id))
 
@@ -375,16 +374,15 @@ def idf(term_id):
     df_t = id2df[term_id]
     return log(total_number_of_documents) - log(df_t)
 
-
-def tf_idf(_, term_id, document_term_freq):
+def tf_idf(_, term_id, document_term_freq, __):
     return log(1 + document_term_freq) * idf(term_id)
 
-
-def bm25(document_id, term_id, document_term_freq):
+def bm25(document_id, term_id, document_term_freq, _):
     """
     :param document_id:
     :param term_id:
     :param document_term_freq: How many times this term appears in the given document
+    :_ unused tuning parameter
     :returns: A score for the given document in the light of the given query term
 
     Since all the scoring functions are supposed to only score one query term,
@@ -410,9 +408,31 @@ def bm25(document_id, term_id, document_term_freq):
 
     return bm25_formula(term_id, document_term_freq, l_d, l_average)
 
+def LM_jelinek_mercer_smoothing(int_document_id, query_term_id, document_term_freq, tuning_parameter=0.1):
+    tf = document_term_freq
+    lamb = tuning_parameter
+    doc_length = index.document_length(int_document_id)
+    C = num_documents
 
-def absolute_discounting(document_id, term_id, document_term_freq):
-    discount = 0.1
+    try:
+        prob_q_d = lamb * (tf / doc_length) + (1 - lamb) * (tf_C[query_term_id] / C)
+    except ZeroDivisionError as err:
+        prob_q_d = 0
+
+    return prob_q_d
+
+def LM_dirichelt_smoothing(int_document_id, query_term_id, document_term_freq, tuning_parameter=500):
+    tf = document_term_freq
+    mu = tuning_parameter
+    doc_length = index.document_length(int_document_id)
+    C = num_documents
+
+    prob_q_d = (tf + mu * (tf_C[query_term_id] / C)) / (doc_length + mu)
+
+    return prob_q_d
+
+def absolute_discounting(document_id, term_id, document_term_freq, tuning_parameter=0.1):
+    discount = tuning_parameter
     d = index.document_length(document_id)
     if d == 0: return 0
     number_of_unique_terms = len(set(index.document(document_id)[1]))
@@ -425,7 +445,32 @@ import cProfile as profile
 profile.run("run_retrieval('PLM', None, document_ids=document_ids, query_word_positions=query_word_positions)", sort=True)
 
 
-# TODO implement the rest of the retrieval functions
+def create_all_run_files():
+    # print("##### Creating all run files! #####")
+    # print("TFIDF")
+    # run_retrieval('tfidf_official', tf_idf, None)
+    #
+    j_m__lambda_values = [0.1, 0.3, 0.5, 0.7, 0.9]
+    # for val in j_m__lambda_values:
+    #     print("LM_jelin", val)
+    #     run_retrieval('lm_jel_official_lambda_{}'.format(val), LM_jelinek_mercer_smoothing, val)
+
+    dirichlet_values = [500, 1000, 1500]
+    for val in dirichlet_values:
+        print("Dirichlet", val)
+        run_retrieval('dirichlet_official_mu_{}'.format(val), LM_dirichelt_smoothing, document_ids, val)
+
+    absolute_discounting_values = j_m__lambda_values
+    for val in absolute_discounting_values:
+        print("ABS_discount", val)
+        run_retrieval('abs_disc_delta_{}'.format(val), absolute_discounting, document_ids, val)
+
+    # TODO PLM
+
+create_all_run_files()
+# run_retrieval("PLM", None, doc_token_ids, 0)
+# val = 0.9
+# run_retrieval('lm_jel_official_lambda_{}'.format(val), LM_jelinek_mercer_smoothing, document_ids, val)
 
 # TODO implement tools to help you with the analysis of the results.
 
@@ -439,6 +484,102 @@ profile.run("run_retrieval('PLM', None, document_ids=document_ids, query_word_po
 # Task 3: Word embeddings for ranking
 # -----------------------------------
 
+# TODO: Load model and stuff
+
+
+class VectorCollection:
+
+    def __init__(self, word_vectors, context_vectors):
+        self.word_vectors = word_vectors
+        self.context_vectors = context_vectors
+
+
+def calculate_document_centroids(pyndri_index, vector_collection, stop_words=tuple(),
+                                 vector_func=lambda word, collection: collection.word_vectors[word]):
+    centroids = dict()
+
+    token2id, id2token, _ = pyndri_index.get_dictionary()
+
+    stop_word_ids = []
+    if len(stop_words) > 0:
+        stop_word_ids.extend([token2id[stop_word] for stop_word in stop_words])
+        stop_word_ids = set(stop_word_ids)
+
+    for document_id in range(pyndri_index.document_base(), pyndri_index.maximum_document()):
+        ext_doc_id, token_ids = pyndri_index.document(document_id)
+        _, id2token, _ = pyndri_index.get_dictionary()
+
+        token_ids = [token_id for token_id in token_ids if token_id not in stop_word_ids]  # Filter out stop words
+        centroid = sum([vector_func(id2token[token_id], vector_collection) for token_id in token_ids]) / len(token_ids)
+
+        centroids[document_id] = centroid
+
+    return centroids
+
+
+def score_by_summing(query_token_ids, pyndri_index, vector_collection,
+                     vector_func_query=lambda word, collection: collection.word_vectors[word],
+                     vector_func_doc=lambda word, collection: collection.word_vectors[word], **kwargs):
+    """
+    Score a query and documents by taking the word embeddings of the words they contain and simply sum them,
+    afterwards comparing the summed vectors with cosine similarity.
+    """
+    # Get query vector
+    _, id2token, _ = pyndri_index.get_dictionary()
+    # Just sum
+    query_vector = sum([
+        vector_func_query(id2token[query_token_id], vector_collection) for query_token_id in query_token_ids
+    ])
+
+    # Score documents
+    document_scores = []
+    for document_id in range(pyndri_index.document_base(), pyndri_index.maximum_document()):
+        ext_doc_id, token_ids = pyndri_index.document(document_id)
+
+        document_vector = sum([vector_func_doc(id2token[token_id], vector_collection) for token_id in token_ids])
+
+        # TODO: Add cosine similarity here
+        score = 0
+
+        document_scores.append((score, ext_doc_id))
+
+    return document_scores
+
+
+def score_by_centroids(query_token_ids, pyndri_index, vector_collection, document_centroids, stop_words=tuple(),
+                       vector_func_query=lambda word, collection: collection.word_vectors[word], **kwargs):
+    """
+    Score a query and documents by taking the word embeddings of the words they contain and calculate the centroids.
+    Finally, compare the centroids using cosine similarities.
+    """
+    # Get query vector
+    token2id, id2token, _ = pyndri_index.get_dictionary()
+
+    # Remove stopwords from query / documents
+    stop_word_ids = []
+    if len(stop_words) > 0:
+        stop_word_ids.extend([token2id[stop_word] for stop_word in stop_words])
+
+    # Just sum
+    # Filter out stop words
+    query_token_ids = [query_token_id for query_token_id in query_token_ids if query_token_id not in stop_word_ids]
+    query_vector = sum([
+        vector_func_query(id2token[query_token_id], vector_collection) for query_token_id in query_token_ids
+    ]) / len(query_token_ids)
+
+    # Score documents
+    document_scores = []
+    for document_id in range(pyndri_index.document_base(), pyndri_index.maximum_document()):
+        ext_doc_id, token_ids = pyndri_index.document(document_id)
+
+        document_vector = document_centroids[document_id]
+
+        # TODO: Add cosine similarity here
+        score = 0
+
+        document_scores.append((score, ext_doc_id))
+
+    return document_scores
 
 # ------------------------------
 # Task 4: Learning to rank (LTR)
