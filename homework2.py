@@ -284,6 +284,7 @@ def query_document_similarity(query_term_ids, document_id):
     document_vector = np.array([tf_idf(query_term_id, inverted_index[query_term_id][document_id]) for query_term_id in query_term_ids])
     return cosine_similarity(query_vector, document_vector)
 
+
 def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000, **retrieval_func_params):
     """
     Runs a retrieval method for all the queries and writes the TREC-friendly results in a file.
@@ -306,32 +307,36 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
 
     if model_name == "PLM":
         # Should probably just make this one of the global variables
-        query_model = generate_query_likelihood_model()
         query_word_positions = retrieval_func_params["query_word_positions"]
+        kernel = k_gaussian
+        if "kernel" in retrieval_func_params:
+            kernel = retrieval_func_params["kernel"]
+
+    start = time.time()
 
     for i, query in enumerate(queries.items()):
-        print("Scoring query {} out of {} queries".format(i, len(queries)))
+        print("\nScoring query {} out of {} queries".format(i, len(queries)))
         query_id, _ = query
         query_term_ids = tokenized_queries[query_id]
 
         query_scores = []
 
-        for document_id in document_ids:
+        for n, document_id in enumerate(document_ids):
             ext_doc_id, document_word_positions = index.document(document_id)
             score = 0
             if model_name == "PLM":  # PLMs need the query in it's entirety
-                kernel = k_gaussian
-                if "kernel" in retrieval_func_params:
-                    kernel = retrieval_func_params["kernel"]
-
-                print("Scoring document {} out of {} documents".format(document_id, index.maximum_document()))
+                if n % 100 == 0:
+                    print("\rScoring document {} out of {} documents ({:.2f} %)".format(
+                            document_id, index.maximum_document(), document_id / index.maximum_document() * 100
+                        ), flush=True, end=""
+                    )
                 document_length = index.document_length(document_id)
                 plm = PLM(
                     query_term_ids, document_length, total_number_of_documents, query_word_positions[document_id],
                     background_model=None, kernel=kernel
                 )
                 score = plm.best_position_strategy_score()
-                print("Score: ", score)
+                #print("Score: ", score)
 
             else:
                 for query_term_id in query_term_ids:
@@ -350,6 +355,9 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
             max_objects_per_query=max_objects_per_query)
 
     print("Done writing results to run file")
+
+    end = time.time()
+    print("Retrieval took {:.2f} seconds.".format(end-start))
     return
 
 

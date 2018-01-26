@@ -1,6 +1,7 @@
 from math import log, exp, cos, pi, sqrt
 import numpy as np
 
+
 class PLM:
     # OBS: PLMs need the entire query to score a document. Just the query term_id is not sufficient
     def __init__(self, query_term_ids, document_length, total_number_of_documents, query_term_positions,
@@ -11,11 +12,13 @@ class PLM:
         self.query_term_positions = query_term_positions
         self.background_model = background_model # A (preferably smoothed) language model of the form back_model[term_id] = counts of the term
         self.kernel = kernel()
+        self.kernel_len = len(self.kernel)
         self.sigma = (len(self.kernel) - 1) // 2
         self.c_marked_memory = {} # Attempt to make a memory of the values we've already caluclated so we don't have to re-calculate them
         self.c_m_total_memory = dict()
         self.k_cache = dict()
         self.position_indices = list(range(document_length))
+        self.full_cm_total = None
 
     def c_m_total(self, i):
         # Here we're going to apply the mathematical trick from (Lv et al., 2009) section 3.3 where they show that
@@ -24,15 +27,24 @@ class PLM:
         # Therefore we just sum our pre-computed kernel values, taking in account positions that are close to the
         # edges of the document.
 
-        start_kernel = max(0, self.sigma - i)  # Use full kernel window or cut it off on the left
+        start_kernel = 0 if i >= self.sigma else self.sigma - i  # Use full kernel window or cut it off on the left
         # Use full kernel window or cut it off on the right
-        end_kernel = min(i + self.sigma + 1, self.document_length - i)
-        return sum(self.kernel[start_kernel:end_kernel])
+        end_kernel = self.kernel_len if i < self.document_length - self.sigma \
+                else self.sigma + self.document_length - i  # End of kernel value window
+
+        # Cache full kernel window sum to save time
+        if start_kernel == 0 and end_kernel == self.kernel_len:
+            if self.full_cm_total is None:
+                self.full_cm_total = np.sum(self.kernel)
+            return self.full_cm_total
+
+        return np.sum(self.kernel[start_kernel:end_kernel])
 
     def p_w_D_i(self, i, counts, *args):
         c_m = counts[i]
         # We use the simplification that the sum over all words is simply the sum of the kernel function
         c_m_tot = self.c_m_total(i)
+
         return c_m / c_m_tot
 
     def p_w_D_i_smoothed(self, i, counts, term_id, lamb=0.5):  # Dirichlet smoothing
@@ -48,7 +60,7 @@ class PLM:
             # Use full kernel window or cut it off on the left
             start_kernel = 0 if position >= self.sigma else self.sigma - position  # Start of kernel value window
             # Use full kernel window or cut it off on the right
-            end_kernel = len(self.kernel) if position < self.document_length - self.sigma \
+            end_kernel = self.kernel_len if position < self.document_length - self.sigma \
                 else self.sigma + self.document_length - position  # End of kernel value window
 
             # Spread values until start of the document or position minus kernel spread
@@ -57,13 +69,6 @@ class PLM:
             end_document = min(position + self.sigma + 1, self.document_length)  # End of propagated counts in document
 
             # Finally add up the propagated counts relative to the position
-            c = counts[start_document:end_document]
-            k = self.kernel[start_kernel:end_kernel]
-
-            if len(c) != len(k):
-                a = 3
-                pass
-
             counts[start_document:end_document] += self.kernel[start_kernel:end_kernel]
 
         return counts
@@ -76,7 +81,8 @@ class PLM:
         # occur in the query. Given our query is at least of size one, these words cannot provide the max score.
         for query_term_id in self.query_term_ids:
             # p(w|Q) ML estimate
-            query_prob = sum([1 for q_id in self.query_term_ids if query_term_id == q_id]) / len(self.query_term_ids)
+            query_prob = np.sum(np.array([1 for q_id in self.query_term_ids if query_term_id == q_id]))\
+                         / len(self.query_term_ids)
 
             pwdi = self.p_w_D_i(i, counts, query_term_id) \
                 if not self.background_model else self.p_w_D_i_smoothed(i, counts, query_term_id)
@@ -88,5 +94,6 @@ class PLM:
 
     def best_position_strategy_score(self):
         counts = self.propagate_counts(self.query_term_positions)
-        return max([self.S(i, counts) for i in self.position_indices])
+        scores = np.array([self.S(i, counts) for i in self.position_indices])
+        return np.max(scores) if len(scores) > 0 else -np.inf
 
