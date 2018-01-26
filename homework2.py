@@ -307,8 +307,6 @@ def run_retrieval(model_name, score_fn, document_ids, tuning_parameter, max_obje
         query_scores = []
 
         for document_id in document_ids:
-
-            if document_id == 10: return
             ext_doc_id, document_word_positions = index.document(document_id)
             score = 0
             if model_name == "PLM": # PLMs need the query in it's entirety
@@ -320,7 +318,7 @@ def run_retrieval(model_name, score_fn, document_ids, tuning_parameter, max_obje
             else:
                 for query_term_id in query_term_ids:
                     document_term_frequency = inverted_index[query_term_id][document_id]
-                    score += score_fn(document_id, query_term_id, document_term_frequency, tuning_parameter)
+                    score += score_fn(document_id, query_term_id, document_term_frequency, tuning_parameter=tuning_parameter)
 
             query_scores.append((score, ext_doc_id))
 
@@ -399,17 +397,22 @@ def absolute_discounting(document_id, term_id, document_term_freq, tuning_parame
     number_of_unique_terms = len(set(index.document(document_id)[1]))
     return max(document_term_freq - discount, 0) / d + ((discount * number_of_unique_terms) / d) * (tf_C[term_id] / total_number_of_documents)
 
-def LM_jelinek_mercer_smoothing(int_document_id, query_term_id, document_term_freq, tuning_param=0.1):
+def LM_jelinek_mercer_smoothing(int_document_id, query_term_id, document_term_freq, tuning_parameter=0.1):
     tf = document_term_freq
-    lamb = tuning_param
+    lamb = tuning_parameter
     doc_length = index.document_length(int_document_id)
     C = num_documents
-# run_retrieval('tfidf', tf_idf)
-# run_retrieval('BM25', bm25)
 
-def LM_dirichelt_smoothing(int_document_id, query_term_id, document_term_freq, tuning_param=500):
+    try:
+        prob_q_d = lamb * (tf / doc_length) + (1 - lamb) * (tf_C[query_term_id] / C)
+    except ZeroDivisionError as err:
+        prob_q_d = 0
+
+    return prob_q_d
+
+def LM_dirichelt_smoothing(int_document_id, query_term_id, document_term_freq, tuning_parameter=500):
     tf = document_term_freq
-    mu = tuning_param
+    mu = tuning_parameter
     doc_length = index.document_length(int_document_id)
     C = num_documents
 
@@ -418,28 +421,31 @@ def LM_dirichelt_smoothing(int_document_id, query_term_id, document_term_freq, t
     return prob_q_d
 
 def create_all_run_files():
-    print("##### Creating all run files! #####")
-    print("TFIDF")
-    run_retrieval('tfidf_official', tf_idf, None)
-
+    # print("##### Creating all run files! #####")
+    # print("TFIDF")
+    # run_retrieval('tfidf_official', tf_idf, None)
+    #
     j_m__lambda_values = [0.1, 0.3, 0.5, 0.7, 0.9]
-    for val in j_m__lambda_values:
-        print("LM_jelin", val)
-        run_retrieval('lm_jel_official_lambda_{}'.format(val), LM_jelinek_mercer_smoothing, val)
+    # for val in j_m__lambda_values:
+    #     print("LM_jelin", val)
+    #     run_retrieval('lm_jel_official_lambda_{}'.format(val), LM_jelinek_mercer_smoothing, val)
 
     dirichlet_values = [500, 1000, 1500]
     for val in dirichlet_values:
         print("Dirichlet", val)
-        run_retrieval('dirichlet_official_mu_{}'.format(val), LM_dirichelt_smoothing, val)
+        run_retrieval('dirichlet_official_mu_{}'.format(val), LM_dirichelt_smoothing, document_ids, val)
 
     absolute_discounting_values = j_m__lambda_values
     for val in absolute_discounting_values:
         print("ABS_discount", val)
-        run_retrieval('abs_disc_delta_{}'.format(val), absolute_discounting, val)
+        run_retrieval('abs_disc_delta_{}'.format(val), absolute_discounting, document_ids, val)
 
     # TODO PLM
 
 create_all_run_files()
+# run_retrieval("PLM", None, doc_token_ids, 0)
+# val = 0.9
+# run_retrieval('lm_jel_official_lambda_{}'.format(val), LM_jelinek_mercer_smoothing, document_ids, val)
 
 # TODO implement tools to help you with the analysis of the results.
 
