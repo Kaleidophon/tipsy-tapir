@@ -23,6 +23,7 @@ import numpy as np
 from PLM import PLM
 from kernels import k_gaussian
 
+# Funtion to generate run and write it to out_f
 def write_run(model_name, data, out_f,
               max_objects_per_query=sys.maxsize,
               skip_sorting=False):
@@ -72,49 +73,7 @@ def write_run(model_name, data, out_f,
                     relevance=relevance,
                     model_name=model_name))
 
-# The following writes the run to standard output.
-# In your code, you should write the runs to local
-# storage in order to pass them to trec_eval.
-
-
-write_run(
-    model_name='example',
-    data={
-        'Q1': ((1.0, 'DOC1'), (0.5, 'DOC2'), (0.75, 'DOC3')),
-        'Q2': ((-0.1, 'DOC1'), (1.25, 'DOC2'), (0.0, 'DOC3')),
-    },
-    out_f=sys.stdout,
-    max_objects_per_query=1000)
-
-
-index = pyndri.Index('index/')
-
-total_number_of_documents = index.maximum_document() - index.document_base()
-
-example_document = index.document(index.document_base())
-# print(example_document)
-
-token2id, id2token, id2df = index.get_dictionary()
-id2tf = index.get_term_frequencies()
-
-# print(list(id2token.items())[:15])
-
-# print([id2token[word_id] for word_id in example_document[1] if word_id > 0])
-
-query_tokens = index.tokenize("University of Massachusetts")
-# print("Query by tokens:", query_tokens)
-query_id_tokens = [token2id.get(query_token, 0) for query_token in query_tokens]
-# print("Query by ids with stopwords:", query_id_tokens)
-query_id_tokens = [word_id for word_id in query_id_tokens if word_id > 0]
-# print("Query by ids without stopwords:", query_id_tokens)
-
-matching_words = sum([True for word_id in example_document[1] if word_id in query_id_tokens])
-# print("Document %s has %d word matches with query: \"%s\"." % (example_document[0], matching_words, ' '.join(query_tokens)))
-# print("Document %s and query \"%s\" have a %.01f%% overlap." % (example_document[0], ' '.join(query_tokens),matching_words/float(len(example_document[1]))*100))
-
-# Parsing the query file
-
-
+# Function to parse the query file
 def parse_topics(file_or_files,
                  max_topics=sys.maxsize, delimiter=';'):
     assert max_topics >= 0 or max_topics is None
@@ -154,24 +113,24 @@ def parse_topics(file_or_files,
 
     return topics
 
-# with open('./ap_88_89/topics_title', 'r') as f_topics:
-    # print(parse_topics([f_topics]))
+# ------------------------------------------------
+# Initialize variables to use through the exercise
+# ------------------------------------------------
+
+index = pyndri.Index('index/')
+token2id, id2token, id2df = index.get_dictionary()
+num_documents = index.maximum_document() - index.document_base()
+dictionary = pyndri.extract_dictionary(index)
+document_ids = list(range(index.document_base(), index.maximum_document()))
 
 # ------------------------------------------------
 # Task 1: Implement and compare lexical IR methods
 # ------------------------------------------------
 
-# IMPORTANT You should structure your code around the helper functions we provide below.
+# Processing queries
 
-### Functions provided:
 with open('./ap_88_89/topics_title', 'r') as f_topics:
     queries = parse_topics([f_topics])
-
-index = pyndri.Index('index/')
-
-num_documents = index.maximum_document() - index.document_base()
-
-dictionary = pyndri.extract_dictionary(index)
 
 tokenized_queries = {
     query_id: [dictionary.translate_token(token)
@@ -226,17 +185,18 @@ avg_doc_length = total_terms / num_documents
 print('Inverted index creation took', time.time() - start_time, 'seconds.')
 
 # tf_C = collections.defaultdict(lambda: 1)
-print("Creating tf_c")
-
+print("Creating tf_c, query_word_positions and num_unique_words")
 tf_C = collections.Counter()
+num_unique_words = collections.defaultdict(int)
 # Query term id + document id -> Position of that term within the doc
 query_word_positions = collections.defaultdict(list)
 # tf_C = collections.defaultdict(lambda: 1)
 
-document_ids = list(range(index.document_base(), index.maximum_document()))
 print("Number of query term ids: ", len(query_term_ids))
 for document_id in document_ids:
     _, positions = index.document(document_id)
+    document_words = Counter(positions)
+    num_unique_words[document_id] = len(document_words)
 
     for pos, id_at_pos in enumerate(positions):
         if pos in query_term_ids:
@@ -246,8 +206,7 @@ for document_id in document_ids:
         #term = inverted_index[term_id][document_id]
         tf_C[term_id] += inverted_index[term_id][document_id]
 
-print("Done creating tf_C")
-
+print("Done creating tf_c, query_word_positions and num_unique_words")
 
 def cosine_similarity(a, b):
     """Takes 2 vectors a, b and returns the cosine similarity according
@@ -263,7 +222,6 @@ def cosine_similarity(a, b):
         return 0.0  # TODO Isn't worst case -1?? Dennis
 
     return res
-
 
 def query_document_similarity(query_term_ids, document_id):
     """
@@ -352,7 +310,6 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
     print("Done writing results to run file")
     return
 
-
 def generate_query_likelihood_model():
     counter = collections.Counter()
 
@@ -368,7 +325,6 @@ def generate_query_likelihood_model():
     # If a term has never been a part of a query we assign it probability 0 in the query model
     model = collections.defaultdict(int, model)
     return model
-
 
 def idf(term_id):
     df_t = id2df[term_id]
@@ -435,7 +391,7 @@ def absolute_discounting(document_id, term_id, document_term_freq, tuning_parame
     discount = tuning_parameter
     d = index.document_length(document_id)
     if d == 0: return 0
-    number_of_unique_terms = len(set(index.document(document_id)[1]))
+    number_of_unique_terms = num_unique_words[document_id]
     return max(document_term_freq - discount, 0) / d + ((discount * number_of_unique_terms) / d) * (tf_C[term_id] / total_number_of_documents)
 
 # run_retrieval('tfidf', tf_idf)
