@@ -335,12 +335,15 @@ def generate_query_likelihood_model():
     model = collections.defaultdict(int, model)
     return model
 
+
 def idf(term_id):
     df_t = id2df[term_id]
     return log(total_number_of_documents) - log(df_t)
 
+
 def tf_idf(_, term_id, document_term_freq, tuning_parameter=None):
     return log(1 + document_term_freq) * idf(term_id)
+
 
 def bm25(document_id, term_id, document_term_freq, tuning_parameter=None):
     """
@@ -373,6 +376,7 @@ def bm25(document_id, term_id, document_term_freq, tuning_parameter=None):
 
     return bm25_formula(term_id, document_term_freq, l_d, l_average)
 
+
 def LM_jelinek_mercer_smoothing(int_document_id, query_term_id, document_term_freq, tuning_parameter=0.1):
     tf = document_term_freq
     lamb = tuning_parameter
@@ -386,6 +390,7 @@ def LM_jelinek_mercer_smoothing(int_document_id, query_term_id, document_term_fr
 
     return prob_q_d
 
+
 def LM_dirichelt_smoothing(int_document_id, query_term_id, document_term_freq, tuning_parameter=500):
     tf = document_term_freq
     mu = tuning_parameter
@@ -395,6 +400,7 @@ def LM_dirichelt_smoothing(int_document_id, query_term_id, document_term_freq, t
     prob_q_d = (tf + mu * (tf_C[query_term_id] / C)) / (doc_length + mu)
 
     return prob_q_d
+
 
 def absolute_discounting(document_id, term_id, document_term_freq, tuning_parameter=0.1):
     discount = tuning_parameter
@@ -450,6 +456,20 @@ create_all_run_files()
 
 # TODO: Load model and stuff
 
+# Combination functions to combine document word embeddings and pre-compute them
+
+
+def doc_centroid(vectors):
+    return np.sum(vectors) / len(vectors)
+
+
+def doc_min(vectors):
+    return np.minimum.reduce(*vectors)
+
+
+def doc_max(vectors):
+    return np.maximum.reduce(*vectors)
+
 
 class VectorCollection:
 
@@ -458,9 +478,9 @@ class VectorCollection:
         self.context_vectors = context_vectors
 
 
-def calculate_document_centroids(pyndri_index, vector_collection, stop_words=tuple(),
-                                 vector_func=lambda word, collection: collection.word_vectors[word]):
-    centroids = dict()
+def calculate_document_representations(pyndri_index, vector_collection, *combination_funcs, stop_words=tuple(),
+                                       vector_func=lambda word, collection: collection.word_vectors[word]):
+    representations = {func.__name__: dict() for func in combination_funcs}
 
     token2id, id2token, _ = pyndri_index.get_dictionary()
 
@@ -474,11 +494,42 @@ def calculate_document_centroids(pyndri_index, vector_collection, stop_words=tup
         _, id2token, _ = pyndri_index.get_dictionary()
 
         token_ids = [token_id for token_id in token_ids if token_id not in stop_word_ids]  # Filter out stop words
-        centroid = sum([vector_func(id2token[token_id], vector_collection) for token_id in token_ids]) / len(token_ids)
+        vectors = [vector_func(id2token[token_id], vector_collection) for token_id in token_ids]
 
-        centroids[document_id] = centroid
+        for func in combination_funcs:
+            representations[func.__name__][document_id] = func(vectors)
 
-    return centroids
+    return representations
+
+
+def score_embeddings(query_token_ids, pyndri_index, vector_collection,
+                     vector_func_query=lambda word, collection: collection.word_vectors[word],
+                     vector_func_doc=lambda word, collection: collection.word_vectors[word],
+                     vector_combination_func=lambda vectors: np.sum(vectors), **kwargs):
+    """
+    Score a query and documents by taking the word embeddings of the words they contain and simply sum them,
+    afterwards comparing the summed vectors with cosine similarity.
+    """
+    # Get query vector
+    _, id2token, _ = pyndri_index.get_dictionary()
+    # Just sum
+    query_vectors = [
+        vector_func_query(id2token[query_token_id], vector_collection) for query_token_id in query_token_ids
+    ]
+    query_vector = vector_combination_func(query_vectors)
+
+    # Score documents
+    document_scores = []
+    for document_id in range(pyndri_index.document_base(), pyndri_index.maximum_document()):
+        ext_doc_id, token_ids = pyndri_index.document(document_id)
+
+        document_vectors = [vector_func_doc(id2token[token_id], vector_collection) for token_id in token_ids]
+        document_vector = vector_combination_func(document_vectors)
+        score = cosine_similarity(query_vector, document_vector)
+
+        document_scores.append((score, ext_doc_id))
+
+    return document_scores
 
 
 def score_by_summing(query_token_ids, pyndri_index, vector_collection,
@@ -488,26 +539,7 @@ def score_by_summing(query_token_ids, pyndri_index, vector_collection,
     Score a query and documents by taking the word embeddings of the words they contain and simply sum them,
     afterwards comparing the summed vectors with cosine similarity.
     """
-    # Get query vector
-    _, id2token, _ = pyndri_index.get_dictionary()
-    # Just sum
-    query_vector = sum([
-        vector_func_query(id2token[query_token_id], vector_collection) for query_token_id in query_token_ids
-    ])
-
-    # Score documents
-    document_scores = []
-    for document_id in range(pyndri_index.document_base(), pyndri_index.maximum_document()):
-        ext_doc_id, token_ids = pyndri_index.document(document_id)
-
-        document_vector = sum([vector_func_doc(id2token[token_id], vector_collection) for token_id in token_ids])
-
-        # TODO: Add cosine similarity here
-        score = 0
-
-        document_scores.append((score, ext_doc_id))
-
-    return document_scores
+    return score_embeddings(query_token_ids, pyndri_index, vector_collection, vector_func_query, vector_func_doc)
 
 
 def score_by_centroids(query_token_ids, pyndri_index, vector_collection, document_centroids, stop_words=tuple(),
@@ -537,9 +569,7 @@ def score_by_centroids(query_token_ids, pyndri_index, vector_collection, documen
         ext_doc_id, token_ids = pyndri_index.document(document_id)
 
         document_vector = document_centroids[document_id]
-
-        # TODO: Add cosine similarity here
-        score = 0
+        score = cosine_similarity(query_vector, document_vector)
 
         document_scores.append((score, ext_doc_id))
 
