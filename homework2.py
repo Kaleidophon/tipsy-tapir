@@ -20,7 +20,8 @@ from math import log
 
 import numpy as np
 
-from PLM import PLM_score
+from PLM import PLM
+from kernels import k_gaussian
 
 def write_run(model_name, data, out_f,
               max_objects_per_query=sys.maxsize,
@@ -228,12 +229,20 @@ print('Inverted index creation took', time.time() - start_time, 'seconds.')
 print("Creating tf_c")
 
 tf_C = collections.Counter()
+# Query term id + document id -> Position of that term within the doc
+query_word_positions = collections.defaultdict(list)
 # tf_C = collections.defaultdict(lambda: 1)
 
 document_ids = list(range(index.document_base(), index.maximum_document()))
 print("Number of query term ids: ", len(query_term_ids))
-for term_id in query_term_ids:
-    for document_id in document_ids:
+for document_id in document_ids:
+    _, positions = index.document(document_id)
+
+    for pos, id_at_pos in enumerate(positions):
+        if pos in query_term_ids:
+            query_word_positions[document_id].append(pos)
+
+    for term_id in query_term_ids:
         #term = inverted_index[term_id][document_id]
         tf_C[term_id] += inverted_index[term_id][document_id]
 
@@ -275,7 +284,7 @@ def query_document_similarity(query_term_ids, document_id):
     document_vector = np.array([tf_idf(query_term_id, inverted_index[query_term_id][document_id]) for query_term_id in query_term_ids])
     return cosine_similarity(query_vector, document_vector)
 
-def run_retrieval(model_name, score_fn, document_ids, tuning_parameter, max_objects_per_query=1000):
+def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000, **retrieval_func_params):
     """
     Runs a retrieval method for all the queries and writes the TREC-friendly results in a file.
     :param model_name: the name of the model (a string)
@@ -298,6 +307,7 @@ def run_retrieval(model_name, score_fn, document_ids, tuning_parameter, max_obje
     if model_name == "PLM":
         # Should probably just make this one of the global variables
         query_model = generate_query_likelihood_model()
+        query_word_positions = retrieval_func_params["query_word_positions"]
 
     for i, query in enumerate(queries.items()):
         print("Scoring query {} out of {} queries".format(i, len(queries)))
@@ -309,11 +319,19 @@ def run_retrieval(model_name, score_fn, document_ids, tuning_parameter, max_obje
         for document_id in document_ids:
             ext_doc_id, document_word_positions = index.document(document_id)
             score = 0
-            if model_name == "PLM": # PLMs need the query in it's entirety
+            if model_name == "PLM":  # PLMs need the query in it's entirety
+                kernel = k_gaussian
+                if "kernel" in retrieval_func_params:
+                    kernel = retrieval_func_params["kernel"]
+
                 print("Scoring document {} out of {} documents".format(document_id, index.maximum_document()))
                 document_length = index.document_length(document_id)
-                plm = PLM_score(query_term_ids, document_length, total_number_of_documents, document_word_positions, query_model, None)
+                plm = PLM(
+                    query_term_ids, document_length, total_number_of_documents, query_word_positions[document_id],
+                    background_model=None, kernel=kernel
+                )
                 score = plm.best_position_strategy_score()
+                print("Score: ", score)
 
             else:
                 for query_term_id in query_term_ids:
@@ -419,6 +437,13 @@ def absolute_discounting(document_id, term_id, document_term_freq, tuning_parame
     if d == 0: return 0
     number_of_unique_terms = len(set(index.document(document_id)[1]))
     return max(document_term_freq - discount, 0) / d + ((discount * number_of_unique_terms) / d) * (tf_C[term_id] / total_number_of_documents)
+
+# run_retrieval('tfidf', tf_idf)
+# run_retrieval('BM25', bm25)
+import cProfile as profile
+
+profile.run("run_retrieval('PLM', None, document_ids=document_ids, query_word_positions=query_word_positions)", sort=True)
+
 
 def create_all_run_files():
     # print("##### Creating all run files! #####")
