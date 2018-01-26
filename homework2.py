@@ -185,7 +185,7 @@ query_term_ids = set(
 
 print('Gathering statistics about', len(query_term_ids), 'terms.')
 
-# inverted index creation.
+inverted index creation.
 start_time = time.time()
 
 document_lengths = {}
@@ -459,6 +459,102 @@ create_all_run_files()
 # Task 3: Word embeddings for ranking
 # -----------------------------------
 
+# TODO: Load model and stuff
+
+
+class VectorCollection:
+
+    def __init__(self, word_vectors, context_vectors):
+        self.word_vectors = word_vectors
+        self.context_vectors = context_vectors
+
+
+def calculate_document_centroids(pyndri_index, vector_collection, stop_words=tuple(),
+                                 vector_func=lambda word, collection: collection.word_vectors[word]):
+    centroids = dict()
+
+    token2id, id2token, _ = pyndri_index.get_dictionary()
+
+    stop_word_ids = []
+    if len(stop_words) > 0:
+        stop_word_ids.extend([token2id[stop_word] for stop_word in stop_words])
+        stop_word_ids = set(stop_word_ids)
+
+    for document_id in range(pyndri_index.document_base(), pyndri_index.maximum_document()):
+        ext_doc_id, token_ids = pyndri_index.document(document_id)
+        _, id2token, _ = pyndri_index.get_dictionary()
+
+        token_ids = [token_id for token_id in token_ids if token_id not in stop_word_ids]  # Filter out stop words
+        centroid = sum([vector_func(id2token[token_id], vector_collection) for token_id in token_ids]) / len(token_ids)
+
+        centroids[document_id] = centroid
+
+    return centroids
+
+
+def score_by_summing(query_token_ids, pyndri_index, vector_collection,
+                     vector_func_query=lambda word, collection: collection.word_vectors[word],
+                     vector_func_doc=lambda word, collection: collection.word_vectors[word], **kwargs):
+    """
+    Score a query and documents by taking the word embeddings of the words they contain and simply sum them,
+    afterwards comparing the summed vectors with cosine similarity.
+    """
+    # Get query vector
+    _, id2token, _ = pyndri_index.get_dictionary()
+    # Just sum
+    query_vector = sum([
+        vector_func_query(id2token[query_token_id], vector_collection) for query_token_id in query_token_ids
+    ])
+
+    # Score documents
+    document_scores = []
+    for document_id in range(pyndri_index.document_base(), pyndri_index.maximum_document()):
+        ext_doc_id, token_ids = pyndri_index.document(document_id)
+
+        document_vector = sum([vector_func_doc(id2token[token_id], vector_collection) for token_id in token_ids])
+
+        # TODO: Add cosine similarity here
+        score = 0
+
+        document_scores.append((score, ext_doc_id))
+
+    return document_scores
+
+
+def score_by_centroids(query_token_ids, pyndri_index, vector_collection, document_centroids, stop_words=tuple(),
+                       vector_func_query=lambda word, collection: collection.word_vectors[word], **kwargs):
+    """
+    Score a query and documents by taking the word embeddings of the words they contain and calculate the centroids.
+    Finally, compare the centroids using cosine similarities.
+    """
+    # Get query vector
+    token2id, id2token, _ = pyndri_index.get_dictionary()
+
+    # Remove stopwords from query / documents
+    stop_word_ids = []
+    if len(stop_words) > 0:
+        stop_word_ids.extend([token2id[stop_word] for stop_word in stop_words])
+
+    # Just sum
+    # Filter out stop words
+    query_token_ids = [query_token_id for query_token_id in query_token_ids if query_token_id not in stop_word_ids]
+    query_vector = sum([
+        vector_func_query(id2token[query_token_id], vector_collection) for query_token_id in query_token_ids
+    ]) / len(query_token_ids)
+
+    # Score documents
+    document_scores = []
+    for document_id in range(pyndri_index.document_base(), pyndri_index.maximum_document()):
+        ext_doc_id, token_ids = pyndri_index.document(document_id)
+
+        document_vector = document_centroids[document_id]
+
+        # TODO: Add cosine similarity here
+        score = 0
+
+        document_scores.append((score, ext_doc_id))
+
+    return document_scores
 
 # ------------------------------
 # Task 4: Learning to rank (LTR)
