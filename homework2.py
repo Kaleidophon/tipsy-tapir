@@ -294,13 +294,14 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
             else:
                 for query_term_id in query_term_ids:
                     document_term_frequency = inverted_index[query_term_id][document_id]
-                    score += score_fn(document_id, query_term_id, document_term_frequency, tuning_parameter=tuning_parameter)
+                    score += score_fn(document_id, query_term_id, document_term_frequency, \
+                            tuning_parameter=retrieval_func_params["tuning_parameter"])
 
             query_scores.append((score, ext_doc_id))
 
         data[query_id] = list(sorted(query_scores, reverse=True))[:max_objects_per_query]
 
-    with open(run_out_path, 'w') as f_out:
+    with open('./lexical_results/{}'.format(run_out_path), 'w') as f_out:
         write_run(
             model_name=model_name,
             data=data,
@@ -330,10 +331,10 @@ def idf(term_id):
     df_t = id2df[term_id]
     return log(total_number_of_documents) - log(df_t)
 
-def tf_idf(_, term_id, document_term_freq, __):
+def tf_idf(_, term_id, document_term_freq, tuning_parameter=None):
     return log(1 + document_term_freq) * idf(term_id)
 
-def bm25(document_id, term_id, document_term_freq, _):
+def bm25(document_id, term_id, document_term_freq, tuning_parameter=None):
     """
     :param document_id:
     :param term_id:
@@ -394,39 +395,38 @@ def absolute_discounting(document_id, term_id, document_term_freq, tuning_parame
     number_of_unique_terms = num_unique_words[document_id]
     return max(document_term_freq - discount, 0) / d + ((discount * number_of_unique_terms) / d) * (tf_C[term_id] / total_number_of_documents)
 
-# run_retrieval('tfidf', tf_idf)
-# run_retrieval('BM25', bm25)
 import cProfile as profile
 
-profile.run("run_retrieval('PLM', None, document_ids=document_ids, query_word_positions=query_word_positions)", sort=True)
+# profile.run("run_retrieval('PLM', None, document_ids=document_ids, query_word_positions=query_word_positions)", sort=True)
 
 
 def create_all_run_files():
-    # print("##### Creating all run files! #####")
+    print("##### Creating all run files! #####")
+
+    # We've already run tf-idf and bm25, so no reason to run them again
     # print("TFIDF")
-    # run_retrieval('tfidf_official', tf_idf, None)
-    #
+    # run_retrieval('tfidf_official', tf_idf, document_ids, tuning_parameter=None)
+
+    # run_retrieval('BM25', bm25, document_ids, tuning_parameter=None)
+
     j_m__lambda_values = [0.1, 0.3, 0.5, 0.7, 0.9]
-    # for val in j_m__lambda_values:
-    #     print("LM_jelin", val)
-    #     run_retrieval('lm_jel_official_lambda_{}'.format(val), LM_jelinek_mercer_smoothing, val)
+    for val in j_m__lambda_values:
+        print("Running LM_jelinek", val)
+        run_retrieval('jelinek_mercer_{}'.format(val), LM_jelinek_mercer_smoothing, document_ids, tuning_parameter=val)
 
     dirichlet_values = [500, 1000, 1500]
     for val in dirichlet_values:
-        print("Dirichlet", val)
-        run_retrieval('dirichlet_official_mu_{}'.format(val), LM_dirichelt_smoothing, document_ids, val)
+        print("Dunning Dirichlet", val)
+        run_retrieval('dirichlet_mu_{}'.format(val), LM_dirichelt_smoothing, document_ids, tuning_parameter=val)
 
     absolute_discounting_values = j_m__lambda_values
     for val in absolute_discounting_values:
-        print("ABS_discount", val)
-        run_retrieval('abs_disc_delta_{}'.format(val), absolute_discounting, document_ids, val)
+        print("Running ABS_discount", val)
+        run_retrieval('abs_disc_delta_{}'.format(val), absolute_discounting, document_ids, tuning_parameter=val)
 
-    # TODO PLM
+    # TODO PLM when it is ready
 
 create_all_run_files()
-# run_retrieval("PLM", None, doc_token_ids, 0)
-# val = 0.9
-# run_retrieval('lm_jel_official_lambda_{}'.format(val), LM_jelinek_mercer_smoothing, document_ids, val)
 
 # TODO implement tools to help you with the analysis of the results.
 

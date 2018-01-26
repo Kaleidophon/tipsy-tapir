@@ -10,7 +10,7 @@ def plot(x_values, y_values, x_label, y_label):
 def plot_ndcg_for_model(filename_prefix, parameters, paramterer_name):
     ndcg_values = []
     for param in parameters:
-        with open("{}_{}.txt".format(filename_prefix, param), "r") as f:
+        with open("./lexical_results/{}_{}.txt".format(filename_prefix, param), "r") as f:
             for line in f.readlines():
                 value_name, _, value = line.split()
                 if value_name == "ndcg_cut_10":
@@ -20,7 +20,7 @@ def plot_ndcg_for_model(filename_prefix, parameters, paramterer_name):
 def get_relevant_values_for_model(filename, requested_values):
     values = {}
 
-    with open(filename, "r") as f:
+    with open("./lexical_results/{}".format(filename), "r") as f:
         for line in f.readlines():
             value_name, _, value = line.split()
             if value_name in requested_values:
