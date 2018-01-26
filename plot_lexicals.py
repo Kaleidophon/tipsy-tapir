@@ -28,14 +28,24 @@ def get_relevant_values_for_model(filename, requested_values):
 
     return values
 
+def print_model_values(model_values):
+    value_to_name = {
+            "ndcg_cut_1000" : "NDCG@1000",
+            "map_cut_1000" : "MAP@1000",
+            "P_5" : "Presicion@5",
+            "recall_1000" : "Recall@1000"
+            }
+
+    for key, value in tf_idf_values.items():
+        print(value_to_name[key], value)
+
 ### Models with no varying parameters ###
 relevant_values = set(["ndcg_cut_1000", "map_cut_1000", "P_5", "recall_1000"])
 
 # TF-IDF
 tf_idf_values = get_relevant_values_for_model("tfidf_results.txt", relevant_values)
 # View the results
-for key, value in tf_idf_values.items():
-    print(key, value)
+print_model_values(tf_idf_values)
 
 # BM25
 
