@@ -390,13 +390,6 @@ def bm25(document_id, term_id, document_term_freq, _):
 
     return bm25_formula(term_id, document_term_freq, l_d, l_average)
 
-def absolute_discounting(document_id, term_id, document_term_freq, tuning_parameter=0.1):
-    discount = tuning_parameter
-    d = index.document_length(document_id)
-    if d == 0: return 0
-    number_of_unique_terms = len(set(index.document(document_id)[1]))
-    return max(document_term_freq - discount, 0) / d + ((discount * number_of_unique_terms) / d) * (tf_C[term_id] / total_number_of_documents)
-
 def LM_jelinek_mercer_smoothing(int_document_id, query_term_id, document_term_freq, tuning_parameter=0.1):
     tf = document_term_freq
     lamb = tuning_parameter
@@ -419,6 +412,13 @@ def LM_dirichelt_smoothing(int_document_id, query_term_id, document_term_freq, t
     prob_q_d = (tf + mu * (tf_C[query_term_id] / C)) / (doc_length + mu)
 
     return prob_q_d
+
+def absolute_discounting(document_id, term_id, document_term_freq, tuning_parameter=0.1):
+    discount = tuning_parameter
+    d = index.document_length(document_id)
+    if d == 0: return 0
+    number_of_unique_terms = len(set(index.document(document_id)[1]))
+    return max(document_term_freq - discount, 0) / d + ((discount * number_of_unique_terms) / d) * (tf_C[term_id] / total_number_of_documents)
 
 def create_all_run_files():
     # print("##### Creating all run files! #####")
