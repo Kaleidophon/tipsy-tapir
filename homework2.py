@@ -270,7 +270,7 @@ def query_document_similarity(query_term_ids, document_id):
     document_vector = np.array([tf_idf(query_term_id, inverted_index[query_term_id][document_id]) for query_term_id in query_term_ids])
     return cosine_similarity(query_vector, document_vector)
 
-def run_retrieval(model_name, score_fn, max_objects_per_query=1000):
+def run_retrieval(model_name, score_fn, tuning_parameter, max_objects_per_query=1000):
     """
     Runs a retrieval method for all the queries and writes the TREC-friendly results in a file.
     :param model_name: the name of the model (a string)
@@ -313,7 +313,7 @@ def run_retrieval(model_name, score_fn, max_objects_per_query=1000):
             else:
                 for query_term_id in query_term_ids:
                     document_term_frequency = inverted_index[query_term_id][document_id]
-                    score += score_fn(document_id, query_term_id, document_term_frequency)
+                    score += score_fn(document_id, query_term_id, document_term_frequency, tuning_parameter)
 
             query_scores.append((score, ext_doc_id))
 
@@ -349,14 +349,15 @@ def idf(term_id):
     df_t = id2df[term_id]
     return log(total_number_of_documents) - log(df_t)
 
-def tf_idf(_, term_id, document_term_freq):
+def tf_idf(_, term_id, document_term_freq, __):
     return log(1 + document_term_freq) * idf(term_id)
 
-def bm25(document_id, term_id, document_term_freq):
+def bm25(document_id, term_id, document_term_freq, _):
     """
     :param document_id:
     :param term_id:
     :param document_term_freq: How many times this term appears in the given document
+    :_ unused tuning parameter
     :returns: A score for the given document in the light of the given query term
 
     Since all the scoring functions are supposed to only score one query term,
@@ -382,20 +383,59 @@ def bm25(document_id, term_id, document_term_freq):
 
     return bm25_formula(term_id, document_term_freq, l_d, l_average)
 
-def absolute_discounting(document_id, term_id, document_term_freq):
-    discount = 0.1
+def absolute_discounting(document_id, term_id, document_term_freq, tuning_parameter=0.1):
+    discount = tuning_parameter
     d = index.document_length(document_id)
     if d == 0: return 0
     number_of_unique_terms = len(set(index.document(document_id)[1]))
     return max(document_term_freq - discount, 0) / d + ((discount * number_of_unique_terms) / d) * (tf_C[term_id] / total_number_of_documents)
 
-# run_retrieval('tfidf', tf_idf)
-# run_retrieval('BM25', bm25)
-# run_retrieval('PLM', None)
-run_retrieval('absolute_discounting', absolute_discounting)
+def LM_jelinek_mercer_smoothing(int_document_id, query_term_id, document_term_freq, tuning_param=0.1):
+    tf = document_term_freq
+    lamb = tuning_param
+    doc_length = index.document_length(int_document_id)
+    C = num_documents
 
+    try:
+        prob_q_d = lamb * (tf / doc_length) + (1 - lamb) * (tf_C[query_term_id] / C)
+    except ZeroDivisionError as err:
+        prob_q_d = 0
 
-# TODO implement the rest of the retrieval functions
+    return prob_q_d
+
+def LM_dirichelt_smoothing(int_document_id, query_term_id, document_term_freq, tuning_param=500):
+    tf = document_term_freq
+    mu = tuning_param
+    doc_length = index.document_length(int_document_id)
+    C = num_documents
+
+    prob_q_d = (tf + mu * (tf_C[query_term_id] / C)) / (doc_length + mu)
+
+    return prob_q_d
+
+def create_all_run_files():
+    print("##### Creating all run files! #####")
+    print("TFIDF")
+    run_retrieval('tfidf_official', tf_idf, None)
+
+    j_m__lambda_values = [0.1, 0.3, 0.5, 0.7, 0.9]
+    for val in j_m__lambda_values:
+        print("LM_jelin", val)
+        run_retrieval('lm_jel_official_lambda_{}'.format(val), LM_jelinek_mercer_smoothing, val)
+
+    dirichlet_values = [500, 1000, 1500]
+    for val in dirichlet_values:
+        print("Dirichlet", val)
+        run_retrieval('dirichlet_official_mu_{}'.format(val), LM_dirichelt_smoothing, val)
+
+    absolute_discounting_values = j_m__lambda_values
+    for val in absolute_discounting_values:
+        print("ABS_discount", val)
+        run_retrieval('abs_disc_delta_{}'.format(val), absolute_discounting, val)
+
+    # TODO PLM
+
+create_all_run_files()
 
 # TODO implement tools to help you with the analysis of the results.
 
