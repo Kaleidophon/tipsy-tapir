@@ -186,7 +186,7 @@ query_term_ids = set(
 
 print('Gathering statistics about', len(query_term_ids), 'terms.')
 
-inverted index creation.
+# inverted index creation.
 start_time = time.time()
 
 document_lengths = {}
