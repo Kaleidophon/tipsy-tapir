@@ -229,12 +229,16 @@ print("Creating tf_c")
 
 tf_C = collections.Counter()
 # tf_C = collections.defaultdict(lambda: 1)
+
+document_ids = list(range(index.document_base(), index.maximum_document()))
 print("Number of query term ids: ", len(query_term_ids))
 for term_id in query_term_ids:
-    for document_id in range(index.document_base(), index.maximum_document()):
+    for document_id in document_ids:
+        #term = inverted_index[term_id][document_id]
         tf_C[term_id] += inverted_index[term_id][document_id]
 
 print("Done creating tf_C")
+
 
 def cosine_similarity(a, b):
     """Takes 2 vectors a, b and returns the cosine similarity according
@@ -247,9 +251,10 @@ def cosine_similarity(a, b):
     if np.isnan(res):
         # If one of the vectors have zero length,
         # we can not score the similarity between the two vectors, so we assume the worst
-        return 0.0
+        return 0.0  # TODO Isn't worst case -1?? Dennis
 
     return res
+
 
 def query_document_similarity(query_term_ids, document_id):
     """
@@ -270,7 +275,7 @@ def query_document_similarity(query_term_ids, document_id):
     document_vector = np.array([tf_idf(query_term_id, inverted_index[query_term_id][document_id]) for query_term_id in query_term_ids])
     return cosine_similarity(query_vector, document_vector)
 
-def run_retrieval(model_name, score_fn, tuning_parameter, max_objects_per_query=1000):
+def run_retrieval(model_name, score_fn, document_ids, tuning_parameter, max_objects_per_query=1000):
     """
     Runs a retrieval method for all the queries and writes the TREC-friendly results in a file.
     :param model_name: the name of the model (a string)
@@ -301,7 +306,9 @@ def run_retrieval(model_name, score_fn, tuning_parameter, max_objects_per_query=
 
         query_scores = []
 
-        for document_id in range(index.document_base(), index.maximum_document()):
+        for document_id in document_ids:
+
+            if document_id == 10: return
             ext_doc_id, document_word_positions = index.document(document_id)
             score = 0
             if model_name == "PLM": # PLMs need the query in it's entirety
@@ -329,6 +336,7 @@ def run_retrieval(model_name, score_fn, tuning_parameter, max_objects_per_query=
     print("Done writing results to run file")
     return
 
+
 def generate_query_likelihood_model():
     counter = collections.Counter()
 
@@ -344,6 +352,7 @@ def generate_query_likelihood_model():
     # If a term has never been a part of a query we assign it probability 0 in the query model
     model = collections.defaultdict(int, model)
     return model
+
 
 def idf(term_id):
     df_t = id2df[term_id]
@@ -395,13 +404,8 @@ def LM_jelinek_mercer_smoothing(int_document_id, query_term_id, document_term_fr
     lamb = tuning_param
     doc_length = index.document_length(int_document_id)
     C = num_documents
-
-    try:
-        prob_q_d = lamb * (tf / doc_length) + (1 - lamb) * (tf_C[query_term_id] / C)
-    except ZeroDivisionError as err:
-        prob_q_d = 0
-
-    return prob_q_d
+# run_retrieval('tfidf', tf_idf)
+# run_retrieval('BM25', bm25)
 
 def LM_dirichelt_smoothing(int_document_id, query_term_id, document_term_freq, tuning_param=500):
     tf = document_term_freq

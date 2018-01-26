@@ -9,49 +9,41 @@ class PLM_score():
         return self.word_positions[i] == term_id
 
     def k_passage(self, i, j):
-        return 1 if abs(i - j) <= self.sigma else 0
+        return 1 if abs(i - j) <= self.rho else 0
 
     def k_gaussian(self, i, j):
-        return exp(-((i-j)**2) / (2 * (self.sigma**2)))
+        return exp(-((i-j)**2) / (2 * (self.rho**2)))
 
     def k_triangle(self, i, j):
-        return 1 - (abs(i - j) / self.sigma) if abs(i - j) <= self.sigma else 0
+        return 1 - (abs(i - j) / self.rho) if abs(i - j) <= self.rho else 0
 
     def k_triangle(self, i, j):
-        return 0.5 * (1 + cos((abs(i - j) * pi)/self.sigma)) if abs(i - j) <= self.sigma else 0
+        return 0.5 * (1 + cos((abs(i - j) * pi)/self.rho)) if abs(i - j) <= self.rho else 0
 
     def k_circle(self, i, j):
-        return sqrt(1 - ((abs(i - j) / self.sigma))**2) if abs(i - j) <= self.sigma else 0
+        return sqrt(1 - ((abs(i - j) / self.rho))**2) if abs(i - j) <= self.rho else 0
 
-    def __init__(self, query_term_ids, document_length, total_number_of_documents, word_positions, query_model, background_model, sigma=50):
+    def __init__(self, query_term_ids, document_length, total_number_of_documents, word_positions, query_model, background_model, rho=50):
         self.query_term_ids = query_term_ids
         self.document_length = document_length
         self.C = total_number_of_documents
         self.word_positions = word_positions
         self.query_model = query_model # A model of the form query_model[term_id] = probability of term_id given all queries
         self.background_model = background_model # A (preferably smoothed) language model of the form back_model[term_id] = counts of the term
-        self.sigma = sigma
+        self.rho = rho
         self.kernel_func = self.k_gaussian # Set the desired kernel function
-        # The normalizing factor at each position is the same regardless of the word we are considering
-        # so we can memoize it.
-        self.c_m_total_memory = {}
 
     def c_marked(self, term_id, i):
         c_m = sum([self.c(term_id, i) * self.kernel_func(i, j) for j in range(self.document_length)])
         return c_m
 
     def c_m_total(self, term_id, i):
-        # Check if the value has already been looked up
-        if i in self.c_m_total_memory:
-            return self.c_m_total_memory[i]
-        else:
-            # We use the simplification that the sum over all words is simply the sum of the kernel function
-            c_m_total = sum([self.kernel_func(i, j) for j in range(self.document_length)])
-            self.c_m_total_memory[i] = c_m_total
+        c_m_total = sum([self.kernel_func(i, j) for j in range(self.document_length)])
         return c_m_total
 
     def p_w_D_i(self, term_id, i):
         c_m = self.c_marked(term_id, i)
+        # We use the simplification that the sum over all words is simply the sum of the kernel function
         c_m_tot = self.c_m_total(term_id, i)
         return c_m / c_m_tot
 
