@@ -195,7 +195,7 @@ query_word_positions = collections.defaultdict(list)
 print("Number of query term ids: ", len(query_term_ids))
 for document_id in document_ids:
     _, positions = index.document(document_id)
-    document_words = Counter(positions)
+    document_words = collections.Counter(positions)
     num_unique_words[document_id] = len(document_words)
 
     for pos, id_at_pos in enumerate(positions):
@@ -290,8 +290,8 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
                     )
                 document_length = index.document_length(document_id)
                 plm = PLM(
-                    query_term_ids, document_length, total_number_of_documents, query_word_positions[document_id],
-                    background_model=None, kernel=kernel
+                    query_term_ids, document_length, query_word_positions[document_id], background_model=None,
+                    kernel=kernel
                 )
                 score = plm.best_position_strategy_score()
                 #print("Score: ", score)
@@ -457,6 +457,15 @@ create_all_run_files()
 # TODO: Load model and stuff
 
 # Combination functions to combine document word embeddings and pre-compute them
+
+
+def doc_convolve(vectors):
+    start_vec, vecs_to_convolve = vectors[0], vectors[1:]
+
+    for vec in vecs_to_convolve:
+        start_vec = np.convolve(start_vec, vec, "same")
+
+    return start_vec
 
 
 def doc_centroid(vectors):
