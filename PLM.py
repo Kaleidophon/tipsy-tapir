@@ -4,11 +4,9 @@ import numpy as np
 
 class PLM:
     # OBS: PLMs need the entire query to score a document. Just the query term_id is not sufficient
-    def __init__(self, query_term_ids, document_length, total_number_of_documents, query_term_positions,
-                 background_model, kernel):
+    def __init__(self, query_term_ids, document_length, query_term_positions, background_model, kernel):
         self.query_term_ids = query_term_ids
         self.document_length = document_length
-        self.C = total_number_of_documents
         self.query_term_positions = query_term_positions
         self.background_model = background_model # A (preferably smoothed) language model of the form back_model[term_id] = counts of the term
         self.kernel = kernel()

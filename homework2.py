@@ -138,6 +138,13 @@ tokenized_queries = {
                if dictionary.has_token(token)]
     for query_id, query_string in queries.items()}
 
+# Record in which query specific query terms are occurring (inverted index)
+query_terms_inverted = collections.defaultdict(set)
+for query_id, query_term_ids in tokenized_queries.items():
+    for query_term_id in query_term_ids:
+        query_terms_inverted[query_term_id].add(query_id)
+
+
 query_term_ids = set(
     query_term_id
     for query_term_ids in tokenized_queries.values()
@@ -188,19 +195,20 @@ print('Inverted index creation took', time.time() - start_time, 'seconds.')
 print("Creating tf_c, query_word_positions and num_unique_words")
 tf_C = collections.Counter()
 num_unique_words = collections.defaultdict(int)
-# Query term id + document id -> Position of that term within the doc
-query_word_positions = collections.defaultdict(list)
+# Document id + Query id -> Positions of terms occurring in that query inside the document
+query_word_positions = collections.defaultdict(lambda: collections.defaultdict(list))
 # tf_C = collections.defaultdict(lambda: 1)
 
 print("Number of query term ids: ", len(query_term_ids))
 for document_id in document_ids:
     _, positions = index.document(document_id)
-    document_words = Counter(positions)
+    document_words = collections.Counter(positions)
     num_unique_words[document_id] = len(document_words)
 
     for pos, id_at_pos in enumerate(positions):
         if pos in query_term_ids:
-            query_word_positions[document_id].append(pos)
+            for query_id in query_terms_inverted[id_at_pos]:
+                query_word_positions[document_id][int(query_id)].append(pos)
 
     for term_id in query_term_ids:
         #term = inverted_index[term_id][document_id]
@@ -290,7 +298,7 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
                     )
                 document_length = index.document_length(document_id)
                 plm = PLM(
-                    query_term_ids, document_length, total_number_of_documents, query_word_positions[document_id],
+                    query_term_ids, document_length, query_word_positions[document_id][query_id],
                     background_model=None, kernel=kernel
                 )
                 score = plm.best_position_strategy_score()
