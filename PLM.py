@@ -86,9 +86,9 @@ class PLM:
                 if not self.background_model else self.p_w_D_i_smoothed(i, counts, query_term_id)
 
             if pwdi != 0:
-                score += -query_prob * log(query_prob / pwdi)
+                score += query_prob * log(query_prob / pwdi)
 
-        return score
+        return -score
 
     def best_position_strategy_score(self):
         counts = self.propagate_counts(self.query_term_positions)
