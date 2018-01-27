@@ -434,7 +434,7 @@ def create_all_run_files():
 
     # TODO PLM when it is ready
 
-# create_all_run_files()
+create_all_run_files()
 
 # TODO implement tools to help you with the analysis of the results.
 
@@ -444,19 +444,19 @@ def create_all_run_files():
 # Task 2: Latent Semantic Models
 # ------------------------------
 
-
-
 # -----------------------------------
 # Task 3: Word embeddings for ranking
 # -----------------------------------
 
 # TODO: Load model and stuff
 
+
 class VectorCollection:
 
     def __init__(self, word_vectors, context_vectors):
         self.word_vectors = word_vectors
         self.context_vectors = context_vectors
+
 
 def calculate_document_centroids(pyndri_index, vector_collection, stop_words=tuple(),
                                  vector_func=lambda word, collection: collection.word_vectors[word]):
@@ -479,6 +479,7 @@ def calculate_document_centroids(pyndri_index, vector_collection, stop_words=tup
         centroids[document_id] = centroid
 
     return centroids
+
 
 def score_by_summing(query_token_ids, pyndri_index, vector_collection,
                      vector_func_query=lambda word, collection: collection.word_vectors[word],
@@ -507,6 +508,7 @@ def score_by_summing(query_token_ids, pyndri_index, vector_collection,
         document_scores.append((score, ext_doc_id))
 
     return document_scores
+
 
 def score_by_centroids(query_token_ids, pyndri_index, vector_collection, document_centroids, stop_words=tuple(),
                        vector_func_query=lambda word, collection: collection.word_vectors[word], **kwargs):
