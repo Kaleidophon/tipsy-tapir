@@ -428,17 +428,17 @@ def create_all_run_files():
     j_m__lambda_values = [0.1, 0.3, 0.5, 0.7, 0.9]
     for val in j_m__lambda_values:
         print("Running LM_jelinek", val)
-        run_retrieval('jelinek_mercer_{}'.format(val), LM_jelinek_mercer_smoothing, document_ids, tuning_parameter=val)
+        run_retrieval('jelinek_mercer_{}'.format(str(val).replace(".", "_")), LM_jelinek_mercer_smoothing, document_ids, tuning_parameter=val)
 
     dirichlet_values = [500, 1000, 1500]
     for val in dirichlet_values:
         print("Dunning Dirichlet", val)
-        run_retrieval('dirichlet_mu_{}'.format(val), LM_dirichelt_smoothing, document_ids, tuning_parameter=val)
+        run_retrieval('dirichlet_mu_{}'.format(str(val).replace(".", "_")), LM_dirichelt_smoothing, document_ids, tuning_parameter=val)
 
     absolute_discounting_values = j_m__lambda_values
     for val in absolute_discounting_values:
         print("Running ABS_discount", val)
-        run_retrieval('abs_disc_delta_{}'.format(val), absolute_discounting, document_ids, tuning_parameter=val)
+        run_retrieval('abs_disc_delta_{}'.format(str(val).replace(".", "_")), absolute_discounting, document_ids, tuning_parameter=val)
 
     # TODO PLM when it is ready
 

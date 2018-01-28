@@ -2,7 +2,6 @@ import matplotlib.pyplot as plt
 
 def plot(x_values, y_values, x_label, y_label, title):
     plt.plot(x_values, y_values, 'o')
-    plt.axis([0, max(x_values), 0, max(y_values) + 0.01])
     plt.xlabel(x_label)
     plt.ylabel(y_label)
     plt.title(title)
@@ -57,22 +56,24 @@ print_model_values(bm25_values)
 ### Models with varying paramters ###
 
 # Jelinek-Mercer
+dataset_type = "validationset"
+
 jel_params = [0.1, 0.3, 0.5, 0.7, 0.9]
 title = "Jelinek-Mercer values of NDCG@10 for different values of lambda"
-jel_ndcg_values = plot_ndcg_for_model("jelinek_mercer", "validationset", jel_params, "lambda", title)
+jel_ndcg_values = plot_ndcg_for_model("jelinek_mercer", dataset_type, jel_params, "lambda", title)
 print("JM values:")
 print(jel_ndcg_values)
 
 # dirichlet prior
 dir_params = [500, 1000, 1500]
 title = "Dirichlet prior values of NDCG@10 for different values of mu"
-dir_ndcg_values = plot_ndcg_for_model("dirichlet_mu", "validationset", dir_params, "mu", title)
+dir_ndcg_values = plot_ndcg_for_model("dirichlet_mu", dataset_type, dir_params, "mu", title)
 print("Dirichlet values:")
 print(dir_ndcg_values)
 
 # Absolute discounting
 title = "Absolute dicounting values of NDCG@10 for different values of delta"
-abs_ndcg_values = plot_ndcg_for_model("abs_disc_delta", "validationset", jel_params, "delta", title)
+abs_ndcg_values = plot_ndcg_for_model("abs_disc_delta", dataset_type, jel_params, "delta", title)
 print("Absolute disc values:")
 print(abs_ndcg_values)
 
