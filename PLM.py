@@ -92,6 +92,13 @@ class PLM:
 
     def best_position_strategy_score(self):
         counts = self.propagate_counts(self.query_term_positions)
-        scores = np.array([self.S(i, counts) for i in self.position_indices])
+        touched_positions = set()
+        for query_term_position in self.query_term_positions:
+            for i in range(-self.sigma, self.sigma):
+                pos = query_term_position + i
+                if pos > -1 and pos < self.document_length:
+                    touched_positions.add(pos)
+
+        scores = np.array([self.S(i, counts) for i in touched_positions])
         return np.max(scores) if len(scores) > 0 else -np.inf
 

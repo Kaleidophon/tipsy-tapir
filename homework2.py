@@ -280,15 +280,18 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
 
     start = time.time()
 
-    for i, query in enumerate(queries.items()):
-        print("\nScoring query {} out of {} queries".format(i, len(queries)))
-        query_id, _ = query
-        query_term_ids = tokenized_queries[query_id]
+    document_times = 0
 
-        query_scores = []
+    for n, document_id in enumerate(document_ids):
+        document_start_time = time.time()
+        ext_doc_id, document_word_positions = index.document(document_id)
 
-        for n, document_id in enumerate(document_ids):
-            ext_doc_id, document_word_positions = index.document(document_id)
+        for i, query in enumerate(queries.items()):
+            query_id, _ = query
+            query_term_ids = tokenized_queries[query_id]
+
+            query_scores = []
+
             score = 0
             if model_name == "PLM":  # PLMs need the query in it's entirety
                 if n % 100 == 0:
@@ -313,6 +316,15 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
             query_scores.append((score, ext_doc_id))
 
         data[query_id] = list(sorted(query_scores, reverse=True))[:max_objects_per_query]
+
+        document_end_time = time.time()
+        document_time = document_end_time - document_start_time
+        document_times += document_time
+        average_document_time = document_times / max(n, 1)
+        documents_left = len(document_ids) - n
+        if n % 1000 == 0:
+            print("\rCurrent document took {} seconds, so for the remaining {} documents we estimate that it will take {} seconds"\
+                    .format(document_time, documents_left, average_document_time * documents_left))
 
     with open('./lexical_results/{}'.format(run_out_path), 'w') as f_out:
         write_run(
@@ -442,7 +454,8 @@ def create_all_run_files():
 
     # TODO PLM when it is ready
 
-create_all_run_files()
+# create_all_run_files()
+run_retrieval('PLM', None, document_ids=document_ids, query_word_positions=query_word_positions)
 
 # TODO implement tools to help you with the analysis of the results.
 
