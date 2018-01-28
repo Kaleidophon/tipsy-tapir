@@ -1,13 +1,14 @@
 import matplotlib.pyplot as plt
 
-def plot(x_values, y_values, x_label, y_label):
+def plot(x_values, y_values, x_label, y_label, title):
     plt.plot(x_values, y_values, 'o')
     plt.axis([0, max(x_values), 0, max(y_values) + 0.01])
     plt.xlabel(x_label)
     plt.ylabel(y_label)
+    plt.title(title)
     plt.show()
 
-def plot_ndcg_for_model(filename_prefix, filename_suffix, parameters, paramterer_name):
+def plot_ndcg_for_model(filename_prefix, filename_suffix, parameters, paramterer_name, plot_title):
     ndcg_values = []
     for param in parameters:
         with open("./lexical_results/{}_results_{}_{}.txt".format(filename_prefix, param, filename_suffix), "r") as f:
@@ -15,7 +16,7 @@ def plot_ndcg_for_model(filename_prefix, filename_suffix, parameters, paramterer
                 value_name, _, value = line.split()
                 if value_name == "ndcg_cut_10":
                     ndcg_values.append(float(value))
-    plot(parameters, ndcg_values, paramterer_name, "NDCG")
+    plot(parameters, ndcg_values, paramterer_name, "NDCG@10", plot_title)
     return ndcg_values
 
 def get_relevant_values_for_model(filename, requested_values):
@@ -57,18 +58,21 @@ print_model_values(bm25_values)
 
 # Jelinek-Mercer
 jel_params = [0.1, 0.3, 0.5, 0.7, 0.9]
-jel_ndcg_values = plot_ndcg_for_model("jelinek_mercer", "validationset", jel_params, "lambda")
+title = "Jelinek-Mercer values of NDCG@10 for different values of lambda"
+jel_ndcg_values = plot_ndcg_for_model("jelinek_mercer", "validationset", jel_params, "lambda", title)
 print("JM values:")
 print(jel_ndcg_values)
 
 # dirichlet prior
 dir_params = [500, 1000, 1500]
-dir_ndcg_values = plot_ndcg_for_model("dirichlet_mu", "validationset", dir_params, "mu")
+title = "Dirichlet prior values of NDCG@10 for different values of mu"
+dir_ndcg_values = plot_ndcg_for_model("dirichlet_mu", "validationset", dir_params, "mu", title)
 print("Dirichlet values:")
 print(dir_ndcg_values)
 
 # Absolute discounting
-abs_ndcg_values = plot_ndcg_for_model("abs_disc_delta", "validationset", jel_params, "delta")
+title = "Absolute dicounting values of NDCG@10 for different values of delta"
+abs_ndcg_values = plot_ndcg_for_model("abs_disc_delta", "validationset", jel_params, "delta", title)
 print("Absolute disc values:")
 print(abs_ndcg_values)
 
