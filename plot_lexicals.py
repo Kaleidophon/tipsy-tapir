@@ -11,7 +11,7 @@ def plot(x_values, y_values, x_label, y_label, title):
 def plot_ndcg_for_model(filename_prefix, filename_suffix, parameters, paramterer_name, plot_title):
     ndcg_values = []
     for param in parameters:
-        with open("./lexical_results/{}_results_{}_{}.txt".format(filename_prefix, param, filename_suffix), "r") as f:
+        with open("./lexical_results/{}_results_{}_{}.txt".format(filename_prefix, str(param).replace(".", "_"), filename_suffix), "r") as f:
             for line in f.readlines():
                 value_name, _, value = line.split()
                 if value_name == "ndcg_cut_10":
