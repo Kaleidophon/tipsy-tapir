@@ -100,5 +100,5 @@ class PLM:
                     touched_positions.add(pos)
 
         scores = np.array([self.S(i, counts) for i in touched_positions])
-        return np.max(scores) if len(scores) > 0 else -np.inf
+        return np.max(scores) if len(scores) > 0 else 0
 

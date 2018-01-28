@@ -206,7 +206,7 @@ for document_id in document_ids:
     num_unique_words[document_id] = len(document_words)
 
     for pos, id_at_pos in enumerate(positions):
-        if pos in query_term_ids:
+        if id_at_pos in query_term_ids:
             for query_id in query_terms_inverted[id_at_pos]:
                 query_word_positions[document_id][int(query_id)].append(pos)
 
@@ -280,6 +280,7 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
 
     start = time.time()
 
+
     query_times = 0
 
     for i, query in enumerate(queries.items()):
@@ -316,6 +317,7 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
                             tuning_parameter=retrieval_func_params["tuning_parameter"])
 
             query_scores.append((score, ext_doc_id))
+            if score != 0: print(score)
 
         data[query_id] = list(sorted(query_scores, reverse=True))[:max_objects_per_query]
 
