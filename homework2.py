@@ -280,32 +280,34 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
 
     start = time.time()
 
-    document_times = 0
+    query_times = 0
 
-    for n, document_id in enumerate(document_ids):
-        document_start_time = time.time()
-        ext_doc_id, document_word_positions = index.document(document_id)
+    for i, query in enumerate(queries.items()):
+        print("Query {} out of {} queries".format(i, len(queries)))
+        query_start_time = time.time()
 
-        for i, query in enumerate(queries.items()):
-            query_id, _ = query
-            query_term_ids = tokenized_queries[query_id]
+        query_id, _ = query
+        query_term_ids = tokenized_queries[query_id]
+
+        for n, document_id in enumerate(document_ids):
+            ext_doc_id, document_word_positions = index.document(document_id)
 
             query_scores = []
 
             score = 0
             if model_name == "PLM":  # PLMs need the query in it's entirety
-                if n % 100 == 0:
-                    print("\rScoring document {} out of {} documents ({:.2f} %)".format(
-                            document_id, index.maximum_document(), document_id / index.maximum_document() * 100
-                        ), flush=True, end=""
-                    )
+                # if n % 100 == 0:
+                    # print("\rScoring document {} out of {} documents ({:.2f} %)".format(
+                    #         document_id, index.maximum_document(), document_id / index.maximum_document() * 100
+                    #     ), flush=True, end=""
+                    # )
                 document_length = index.document_length(document_id)
                 plm = PLM(
                     query_term_ids, document_length, query_word_positions[document_id][query_id],
                     background_model=None, kernel=kernel
                 )
                 score = plm.best_position_strategy_score()
-                #print("Score: ", score)
+                # print("Score: ", score)
 
             else:
                 for query_term_id in query_term_ids:
@@ -317,14 +319,13 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
 
         data[query_id] = list(sorted(query_scores, reverse=True))[:max_objects_per_query]
 
-        document_end_time = time.time()
-        document_time = document_end_time - document_start_time
-        document_times += document_time
-        average_document_time = document_times / max(n, 1)
-        documents_left = len(document_ids) - n
-        if n % 1000 == 0:
-            print("\rCurrent document took {} seconds, so for the remaining {} documents we estimate that it will take {} seconds"\
-                    .format(document_time, documents_left, average_document_time * documents_left))
+        query_end_time = time.time()
+        query_time = query_end_time - query_start_time
+        query_times += query_time
+        average_query_time = query_times / max(i, 1)
+        querys_left = len(queries) - i
+        print("\rThe average query time is {} seconds, so for the remaining {} querys we estimate that it will take {} seconds"\
+                .format(average_query_time, querys_left, average_query_time * querys_left))
 
     with open('./lexical_results/{}'.format(run_out_path), 'w') as f_out:
         write_run(
