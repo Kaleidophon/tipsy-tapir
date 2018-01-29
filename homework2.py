@@ -23,6 +23,7 @@ import numpy as np
 
 from PLM import PLM
 from kernels import k_gaussian
+from LSM import LSM
 
 # Funtion to generate run and write it to out_f
 def write_run(model_name, data, out_f,
@@ -123,7 +124,7 @@ token2id, id2token, id2df = index.get_dictionary()
 num_documents = index.maximum_document() - index.document_base()
 dictionary = pyndri.extract_dictionary(index)
 document_ids = list(range(index.document_base(), index.maximum_document()))
-# Ranking list
+# Ranking dictionary
 ranking = {}
 
 # ------------------------------------------------
@@ -470,9 +471,24 @@ def lsm_reranking(ranked_queries, LSM_model):
 
     return reranking
 
+# LSI
+start = time.time()
+lsi = ('LSI', index)
+lsi.create_model()
+end = time.time()
+print("LSI model creation took {:.2f} seconds.".format(end-start))
 
-lsi_reranking = lsi_score(ranked_queries = ranking['tfidf'], LSM_model=)
+start = time.time()
+lsi.create_similarity_index()
+end = time.time()
+print("LSI similarity index creation took {:.2f} seconds.".format(end-start))
 
+start = time.time()
+lsi_reranking = lsm_reranking(ranked_queries = ranking['tfidf'], LSM_model=lsi)
+end = time.time()
+print("LSI reranking took {:.2f} seconds.".format(end-start))
+
+start = time.time()
 run_out_path = '{}.run'.format('LSI')
 with open('./lexical_results/{}'.format(run_out_path), 'w') as f_out:
     write_run(
@@ -480,11 +496,28 @@ with open('./lexical_results/{}'.format(run_out_path), 'w') as f_out:
         data=lsi_reranking,
         out_f=f_out,
         max_objects_per_query=1000)
+end = time.time()
+print("LSI run file creation {:.2f} seconds.".format(end-start))
 
 
+# LDA
+start = time.time()
+lda = ('LDA', index)
+lda.create_model()
+end = time.time()
+print("LDA model creation took {:.2f} seconds.".format(end-start))
 
-lda_reranking = lda_score(ranked_queries = tfidf_ranking, LSM_model=)
+start = time.time()
+lda.create_similarity_index()
+end = time.time()
+print("LDA similarity index creation took {:.2f} seconds.".format(end-start))
 
+start = time.time()
+lda_reranking = lsm_reranking(ranked_queries = ranking['tfidf'], LSM_model=lda)
+end = time.time()
+print("LDA reranking took {:.2f} seconds.".format(end-start))
+
+start = time.time()
 run_out_path = '{}.run'.format('LDA')
 with open('./lexical_results/{}'.format(run_out_path), 'w') as f_out:
     write_run(
@@ -492,6 +525,8 @@ with open('./lexical_results/{}'.format(run_out_path), 'w') as f_out:
         data=lda_reranking,
         out_f=f_out,
         max_objects_per_query=1000)
+end = time.time()
+print("LDA run file creation {:.2f} seconds.".format(end-start))
 
 # -----------------------------------
 # Task 3: Word embeddings for ranking
