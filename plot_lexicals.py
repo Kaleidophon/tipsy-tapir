@@ -1,10 +1,13 @@
 import matplotlib.pyplot as plt
 
 def plot(x_values, y_values, x_label, y_label, title):
-    plt.plot(x_values, y_values, 'o')
+    # plt.plot(x_values, y_values, 'o')
     plt.xlabel(x_label)
     plt.ylabel(y_label)
     plt.title(title)
+    x_indexes = [i for i in range(len(x_values))]
+    plt.bar(x_indexes, y_values)
+    plt.xticks(x_indexes, tuple(["{}={}".format(x_label, val) for val in x_values]))
     plt.show()
 
 def plot_ndcg_for_model(filename_prefix, filename_suffix, parameters, paramterer_name, plot_title):
