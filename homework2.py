@@ -18,8 +18,6 @@ import numpy as np
 import pyndri
 
 from PLM import PLM
-from embeddings import save_document_representations, precomputed_document_representations_win, \
-    precomputed_document_representations_wout
 from kernels import k_gaussian
 
 
@@ -207,6 +205,7 @@ for document_id in document_ids:
         tf_C[term_id] += inverted_index[term_id][document_id]
 
 print("Done creating tf_c, query_word_positions and num_unique_words")
+
 
 def cosine_similarity(a, b):
     """Takes 2 vectors a, b and returns the cosine similarity according

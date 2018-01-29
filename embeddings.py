@@ -2,9 +2,51 @@ import h5py
 import numpy as np
 from gensim.models import Word2Vec
 from sklearn.cluster import KMeans
-from collections import Counter
+from collections import Counter, defaultdict, OrderedDict
+import pyndri
+import sys
+import logging
+import io
 
-from homework2 import query_term_id, cosine_similarity, index, document_ids
+
+def parse_topics(file_or_files,
+                 max_topics=sys.maxsize, delimiter=';'):
+    assert max_topics >= 0 or max_topics is None
+
+    topics = OrderedDict()
+
+    if not isinstance(file_or_files, list) and \
+            not isinstance(file_or_files, tuple):
+        if hasattr(file_or_files, '__iter__'):
+            file_or_files = list(file_or_files)
+        else:
+            file_or_files = [file_or_files]
+
+    for f in file_or_files:
+        assert isinstance(f, io.IOBase)
+
+        for line in f:
+            assert(isinstance(line, str))
+
+            line = line.strip()
+
+            if not line:
+                continue
+
+            topic_id, terms = line.split(delimiter, 1)
+
+            if topic_id in topics and (topics[topic_id] != terms):
+                    logging.error('Duplicate topic "%s" (%s vs. %s).',
+                                  topic_id,
+                                  topics[topic_id],
+                                  terms)
+
+            topics[topic_id] = terms
+
+            if max_topics > 0 and len(topics) >= max_topics:
+                break
+
+    return topics
 
 
 def idf(term_id, id2df, number_of_documents):
@@ -12,24 +54,24 @@ def idf(term_id, id2df, number_of_documents):
     return np.log(number_of_documents) - np.log(df_t)
 
 
-def tf_idf(term_id, document_term_freq, id2df, number_of_documents):
-    return np.log(1 + document_term_freq) * idf(term_id, id2df, number_of_documents)
+def tf_idf(term_id, document_term_freqs, id2df, number_of_documents):
+    return np.log(1 + document_term_freqs[term_id]) * idf(term_id, id2df, number_of_documents)
 
 
-def doc_centroid(vectors, **kwargs):
-    return np.add.reduce(vectors) / len(vectors) if len(vectors) > 0 else np.array([])
+def doc_centroid(vectors, cache=None, **kwargs):
+    return np.add.reduce(vectors) / len(vectors) if len(vectors) > 0 else np.array([]), cache
 
 
-def doc_sum(vectors, **kwargs):
-    return np.add.reduce(vectors) if len(vectors) > 0 else np.array([])
+def doc_sum(vectors, cache=None, **kwargs):
+    return np.add.reduce(vectors) if len(vectors) > 0 else np.array([]), cache
 
 
-def doc_min(vectors, **kwargs):
-    return np.minimum.reduce(vectors) if len(vectors) > 0 else np.array([])
+def doc_min(vectors, cache=None, **kwargs):
+    return np.minimum.reduce(vectors) if len(vectors) > 0 else np.array([]), cache
 
 
-def doc_max(vectors, **kwargs):
-    return np.maximum.reduce(vectors) if len(vectors) > 0 else np.array([])
+def doc_max(vectors, cache=None, **kwargs):
+    return np.maximum.reduce(vectors) if len(vectors) > 0 else np.array([]), cache
 
 
 def _doc_kmeans(vectors, k=None, **kwargs):
@@ -53,22 +95,27 @@ def _doc_kmeans(vectors, k=None, **kwargs):
     return [vector for vector, label in zip(vectors, labels) if label == biggest_cluster]
 
 
-def doc_kmeans(vectors, k=None):
-    return doc_centroid(_doc_kmeans(vectors, k))
+def doc_kmeans(vectors, k=None, cache=None, **kwargs):
+    filtered_vectors = _doc_kmeans(vectors, k)
+
+    # Cache most recent vectors for doc_kmeans_tfidf so you don't have to do it twice
+    if cache is not None:
+        cache["kmeans_filtered"] = filtered_vectors
+    return doc_centroid(filtered_vectors), cache
 
 
-def doc_tfidf_scaling(vectors, token_ids, document_term_freq, id2df, number_of_documents, **kwargs):
+def doc_tfidf_scaling(vectors, token_ids, document_term_freqs, id2df, number_of_documents, cache=None, **kwargs):
     if len(vectors) == 0:
         return np.array([])
 
     for i, (vector, token_id) in enumerate(zip(vectors, token_ids)):
-        term_tf_idf = tf_idf(token_id, document_term_freq, id2df, number_of_documents)
+        term_tf_idf = tf_idf(token_id, document_term_freqs, id2df, number_of_documents)
         vectors[i] = vector * term_tf_idf
 
-    return doc_centroid(vectors)
+    return doc_centroid(vectors), cache
 
 
-def doc_circular_conv(vectors, **kwargs):
+def doc_circular_conv(vectors, cache=None, **kwargs):
     def circular_conf(vec1, vec2):
         return [
             sum([vec1[k] * vec2[i - k] for k in range(len(vec1))])
@@ -85,14 +132,13 @@ def doc_circular_conv(vectors, **kwargs):
     for vector in to_convolve:
         start_vector = circular_conf(start_vector, vector)
 
-    return start_vector / len(vectors)
+    return np.array(start_vector) / len(vectors), cache
 
 
-
-def doc_kmeans_tfidf(vectors, token_ids, document_term_freq, id2df, number_of_documents, k=None, **kwargs):
-    # Dirty but fast heuristic
-    filtered_vectors = _doc_kmeans(vectors, k)
-    return doc_tfidf_scaling(filtered_vectors, token_ids, document_term_freq, id2df, number_of_documents)
+def doc_kmeans_tfidf(vectors, token_ids, document_term_freqs, id2df, number_of_documents, k=None, cache=dict(), **kwargs):
+    # Fetch filtered vectors produced by doc_kmeans to save computational cost
+    filtered_vectors = cache.get("kmeans_filtered", _doc_kmeans(vectors, k))
+    return doc_tfidf_scaling(filtered_vectors, token_ids, document_term_freqs, id2df, number_of_documents, cache=cache)
 
 
 class VectorCollection:
@@ -113,7 +159,6 @@ class VectorCollection:
         # In case it doesn't need to be trained, delete train code to free up ram
         word_vectors = model.wv
 
-        # TODO: Test this code
         context_vectors = dict()
         if hasattr(model, "syn1"):
             # For hierarchical softmax
@@ -127,12 +172,13 @@ class VectorCollection:
 
 
 def calculate_document_representations(pyndri_index, vector_collection, document_ids, *combination_funcs,
-                                       vector_func=lambda word, collection: collection.word_vectors[word]):
+                                       vector_func=lambda word, collection: collection.word_vectors[word], **kwargs):
     representations = {func.__name__: dict() for func in combination_funcs}
 
     token2id, id2token, _ = pyndri_index.get_dictionary()
     unkowns = set()
     n_documents = len(document_ids)
+    cache = dict()  # For some calculations, caching some computations is helpful
 
     for i, document_id in enumerate(document_ids):
         print("\r{:.2f} % of documents processed.".format((i+1)/n_documents*100), end="", flush=True)
@@ -150,7 +196,7 @@ def calculate_document_representations(pyndri_index, vector_collection, document
         #vectors = [vector_func(id2token[token_id], vector_collection) for token_id in token_ids]
 
         for func in combination_funcs:
-            representation = func(vectors)
+            (representation, _), cache = func(vectors, token_ids=token_ids, cache=cache, **kwargs)
             if representation.shape == (0, ): break
             representations[func.__name__][document_id] = representation
 
@@ -197,36 +243,90 @@ def save_document_representations(reps, path):
 
     for name, vector_dict in reps.items():
         vectors = [vector_dict[i] for i in vector_dict.keys()]
-        #print(name)
-        #for vector in vectors:
-        #    print(vector)
-        #print(name)
-        #print(len(vectors))
-        #size0 = len(vectors[0])
-        #print(size0)
-        #print([len(vector) for vector in vectors if len(vector) != size0])
         file.create_dataset(name, data=vectors)
 
     file.close()
 
 
+print("Loading index and such...")
+index = pyndri.Index('index/')
+token2id, id2token, id2df = index.get_dictionary()
+num_documents = index.maximum_document() - index.document_base()
+term_frequencies = Counter()
+
+dictionary = pyndri.extract_dictionary(index)
+document_ids = list(range(index.document_base(), index.maximum_document()))
+
+with open('./ap_88_89/topics_title', 'r') as f_topics:
+    queries = parse_topics([f_topics])
+
+tokenized_queries = {
+    query_id: [dictionary.translate_token(token)
+               for token in index.tokenize(query_string)
+               if dictionary.has_token(token)]
+    for query_id, query_string in queries.items()}
+
+query_term_ids = set(
+    query_term_id
+    for query_term_ids in tokenized_queries.values()
+    for query_term_id in query_term_ids)
+
+print('Gathering statistics about', len(query_term_ids), 'terms.')
+
+for int_doc_id in document_ids:
+    ext_doc_id, doc_token_ids = index.document(int_doc_id)
+    term_frequencies += Counter([token_id for token_id in doc_token_ids if token_id in query_term_ids])
+
+
 print("Reading word embeddings...")
 
 vectors = VectorCollection.load_vectors("./w2v_60")
-precomputed_document_representations_win = calculate_document_representations(
-    index, vectors, document_ids, doc_centroid, doc_min, doc_max
+# different representations:
+# 1. Coordinate-wise min
+# 2. Coordinate-wise max
+# 3. Centroid
+# 4. Sum
+# 5. K-means filtering
+# 6. tf-idf scaling
+# 7. K-means + tfidf
+# 8. Circular convolution
+
+## W_in representations
+# # 1. - 4.
+# print("Precomputing vector document representations 1. - 4. with W_in vectors...")
+# precomputed_document_representations_win_1_4 = calculate_document_representations(
+#     index, vectors, document_ids, doc_min, doc_max, doc_centroid, doc_sum
+# )
+# save_document_representations(precomputed_document_representations_win_1_4, "./win_representations_1_4")
+# del precomputed_document_representations_win_1_4
+
+# 5. - 8.
+print("Precomputing vector document representations 5. - 7. with W_in vectors...")
+precomputed_document_representations_win_5_7 = calculate_document_representations(
+    index, vectors, document_ids, doc_kmeans, doc_tfidf_scaling, doc_kmeans_tfidf, #doc_circular_conv,
+    document_term_freqs=term_frequencies, id2df=id2df, number_of_documents=num_documents
 )
-precomputed_document_representations_wout = calculate_document_representations(
-    index, vectors, document_ids, doc_centroid, doc_min, doc_max,
-    vector_func=lambda word, collection: collection.context_vectors[word]
+save_document_representations(precomputed_document_representations_win_5_7, "./win_representations_5_7")
+del precomputed_document_representations_win_5_7
+
+
+## W_out representations
+# # 1. - 4.
+# print("Precomputing vector document representations 1. - 4. with W_out vectors...")
+# precomputed_document_representations_wout_1_4 = calculate_document_representations(
+#     index, vectors, document_ids, doc_min, doc_max, doc_centroid, doc_sum,
+#     vector_func=lambda word, collection: collection.context_vectors[word]
+# )
+# save_document_representations(precomputed_document_representations_wout_1_4, "./wout_representations_1_4.pkl")
+# del precomputed_document_representations_wout_1_4
+
+# 5. - 8.
+print("Precomputing vector document representations 5. - 7. with W_out vectors...")
+precomputed_document_representations_wout_5_7 = calculate_document_representations(
+    index, vectors, document_ids, doc_kmeans, doc_tfidf_scaling, doc_kmeans_tfidf, # doc_circular_conv,
+    vector_func=lambda word, collection: collection.context_vectors[word],
+    document_term_freqs=term_frequencies, id2df=id2df, number_of_documents=num_documents
 )
+save_document_representations(precomputed_document_representations_wout_5_7, "./wout_representations_5_7")
+del precomputed_document_representations_wout_5_7
 
-print("Precomputing vector document representations with W_in vectors...")
-
-save_document_representations(precomputed_document_representations_win, "./win_representations.pkl")
-del precomputed_document_representations_win
-
-print("Precomputing vector document representations with W_out vectors...")
-
-save_document_representations(precomputed_document_representations_wout, "./wout_representations.pkl")
-del precomputed_document_representations_wout
