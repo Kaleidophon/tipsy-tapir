@@ -142,7 +142,8 @@ tokenized_queries = {
 query_terms_inverted = collections.defaultdict(set)
 for query_id, query_term_ids in tokenized_queries.items():
     for query_term_id in query_term_ids:
-        query_terms_inverted[query_term_id].add(query_id)
+        # A lookup-table for what queries this term appears in
+        query_terms_inverted[query_term_id].add(int(query_id))
 
 
 query_term_ids = set(
@@ -290,10 +291,11 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
         query_id, _ = query
         query_term_ids = tokenized_queries[query_id]
 
+        query_scores = []
+
         for n, document_id in enumerate(document_ids):
             ext_doc_id, document_word_positions = index.document(document_id)
 
-            query_scores = []
 
             score = 0
             if model_name == "PLM":  # PLMs need the query in it's entirety
@@ -304,7 +306,7 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
                     # )
                 document_length = index.document_length(document_id)
                 plm = PLM(
-                    query_term_ids, document_length, query_word_positions[document_id][query_id],
+                    query_term_ids, document_length, query_word_positions[document_id][int(query_id)],
                     background_model=None, kernel=kernel
                 )
                 score = plm.best_position_strategy_score()
@@ -317,7 +319,7 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
                             tuning_parameter=retrieval_func_params["tuning_parameter"])
 
             query_scores.append((score, ext_doc_id))
-            if score != 0: print(score)
+            # if score != 0: print(score)
 
         data[query_id] = list(sorted(query_scores, reverse=True))[:max_objects_per_query]
 
