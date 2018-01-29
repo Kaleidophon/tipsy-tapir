@@ -452,6 +452,10 @@ create_all_run_files()
 # Task 2: Latent Semantic Models
 # ------------------------------
 
+# get tfidf ranked list of 1000 docs
+# tfidf_list =
+
+
 # -----------------------------------
 # Task 3: Word embeddings for ranking
 # -----------------------------------
