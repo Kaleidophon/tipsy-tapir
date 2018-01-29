@@ -15,6 +15,7 @@ import collections
 import pyndri
 
 import time
+import cProfile as profile
 
 from math import log
 
@@ -122,6 +123,8 @@ token2id, id2token, id2df = index.get_dictionary()
 num_documents = index.maximum_document() - index.document_base()
 dictionary = pyndri.extract_dictionary(index)
 document_ids = list(range(index.document_base(), index.maximum_document()))
+# Ranking list
+ranking = {}
 
 # ------------------------------------------------
 # Task 1: Implement and compare lexical IR methods
@@ -216,6 +219,7 @@ for document_id in document_ids:
 
 print("Done creating tf_c, query_word_positions and num_unique_words")
 
+# TODO: not used ! To remove ?
 def cosine_similarity(a, b):
     """Takes 2 vectors a, b and returns the cosine similarity according
     to the definition of the dot product
@@ -231,6 +235,7 @@ def cosine_similarity(a, b):
 
     return res
 
+# TODO: not used ! To remove ?
 def query_document_similarity(query_term_ids, document_id):
     """
     Calculates the scores for both the query and the document given by the query_term_ids
@@ -250,7 +255,6 @@ def query_document_similarity(query_term_ids, document_id):
     document_vector = np.array([tf_idf(query_term_id, inverted_index[query_term_id][document_id]) for query_term_id in query_term_ids])
     return cosine_similarity(query_vector, document_vector)
 
-
 def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000, **retrieval_func_params):
     """
     Runs a retrieval method for all the queries and writes the TREC-friendly results in a file.
@@ -267,6 +271,8 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
         run_out_path = '{}_{}.run'.format(model_name, run_id)
 
     print('Retrieving using', model_name)
+
+    ranking[model_name] = collections.defaultdict(list)
 
     # The dictionary data should have the form: query_id --> (document_score, external_doc_id)
     data = {}
@@ -303,21 +309,19 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
                 )
                 score = plm.best_position_strategy_score()
                 #print("Score: ", score)
-
             else:
                 for query_term_id in query_term_ids:
                     document_term_frequency = inverted_index[query_term_id][document_id]
                     score += score_fn(document_id, query_term_id, document_term_frequency, \
                             tuning_parameter=retrieval_func_params["tuning_parameter"])
+            ranking[model_name][query_id].append((score, ext_doc_id))
 
-            query_scores.append((score, ext_doc_id))
-
-        data[query_id] = list(sorted(query_scores, reverse=True))[:max_objects_per_query]
+        ranking[model_name][query_id] = list(sorted(ranking[model_name][query_id], reverse=True))[:max_objects_per_query]
 
     with open('./lexical_results/{}'.format(run_out_path), 'w') as f_out:
         write_run(
             model_name=model_name,
-            data=data,
+            data=ranking[model_name],
             out_f=f_out,
             max_objects_per_query=max_objects_per_query)
 
@@ -411,36 +415,29 @@ def absolute_discounting(document_id, term_id, document_term_freq, tuning_parame
     number_of_unique_terms = num_unique_words[document_id]
     return max(document_term_freq - discount, 0) / d + ((discount * number_of_unique_terms) / d) * (tf_C[term_id] / total_number_of_documents)
 
-import cProfile as profile
-
-# profile.run("run_retrieval('PLM', None, document_ids=document_ids, query_word_positions=query_word_positions)", sort=True)
-
-
 def create_all_run_files():
     print("##### Creating all run files! #####")
 
-    # We've already run tf-idf and bm25, so no reason to run them again
-    # print("TFIDF")
-    # run_retrieval('tfidf_official', tf_idf, document_ids, tuning_parameter=None)
+    run_retrieval('tfidf', tf_idf, document_ids, tuning_parameter=None)
 
     # run_retrieval('BM25', bm25, document_ids, tuning_parameter=None)
 
-    j_m__lambda_values = [0.1, 0.3, 0.5, 0.7, 0.9]
-    for val in j_m__lambda_values:
-        print("Running LM_jelinek", val)
-        run_retrieval('jelinek_mercer_{}'.format(val), LM_jelinek_mercer_smoothing, document_ids, tuning_parameter=val)
+    # j_m__lambda_values = [0.1, 0.3, 0.5, 0.7, 0.9]
+    # for val in j_m__lambda_values:
+    #     print("Running LM_jelinek", val)
+    #     run_retrieval('jelinek_mercer_{}'.format(val), LM_jelinek_mercer_smoothing, document_ids, tuning_parameter=val)
+    #
+    # dirichlet_values = [500, 1000, 1500]
+    # for val in dirichlet_values:
+    #     print("Dunning Dirichlet", val)
+    #     run_retrieval('dirichlet_mu_{}'.format(val), LM_dirichelt_smoothing, document_ids, tuning_parameter=val)
+    #
+    # absolute_discounting_values = j_m__lambda_values
+    # for val in absolute_discounting_values:
+    #     print("Running ABS_discount", val)
+    #     run_retrieval('abs_disc_delta_{}'.format(val), absolute_discounting, document_ids, tuning_parameter=val)
 
-    dirichlet_values = [500, 1000, 1500]
-    for val in dirichlet_values:
-        print("Dunning Dirichlet", val)
-        run_retrieval('dirichlet_mu_{}'.format(val), LM_dirichelt_smoothing, document_ids, tuning_parameter=val)
-
-    absolute_discounting_values = j_m__lambda_values
-    for val in absolute_discounting_values:
-        print("Running ABS_discount", val)
-        run_retrieval('abs_disc_delta_{}'.format(val), absolute_discounting, document_ids, tuning_parameter=val)
-
-    # TODO PLM when it is ready
+    # TODO: PLM when it is ready
 
 create_all_run_files()
 
@@ -452,9 +449,49 @@ create_all_run_files()
 # Task 2: Latent Semantic Models
 # ------------------------------
 
-# get tfidf ranked list of 1000 docs
-# tfidf_list =
+def lsm_reranking(ranked_queries, LSM_model):
+    reranking = collections.defaultdict(list)
+    LSM_model.similarity_index.num_best = None
 
+    for query_id, docs in ranked_queries.items():
+        query_terms = [id2token[term_id] for term_id in tokenized_queries[query_id]]
+        query_bow = LSM_model.dictionary.doc2bow(query_terms)
+        query_lsm = LSM_model.model[query_bow]
+
+        # Get similarity of query with all documents
+        sims = LSM_model.similarity_index[query_lsm]
+
+        for document_id in document_ids:
+            ext_doc_id, _ = index.document(document_id)
+            reranking[query_id].append((sims[document_id-1], ext_doc_id))
+
+    for query_id in reranking:
+        reranking[query_id] = list(sorted(reranking[query_id], reverse=True))[:1000]
+
+    return reranking
+
+
+lsi_reranking = lsi_score(ranked_queries = ranking['tfidf'], LSM_model=)
+
+run_out_path = '{}.run'.format('LSI')
+with open('./lexical_results/{}'.format(run_out_path), 'w') as f_out:
+    write_run(
+        model_name='LSI',
+        data=lsi_reranking,
+        out_f=f_out,
+        max_objects_per_query=1000)
+
+
+
+lda_reranking = lda_score(ranked_queries = tfidf_ranking, LSM_model=)
+
+run_out_path = '{}.run'.format('LDA')
+with open('./lexical_results/{}'.format(run_out_path), 'w') as f_out:
+    write_run(
+        model_name='LDA',
+        data=lda_reranking,
+        out_f=f_out,
+        max_objects_per_query=1000)
 
 # -----------------------------------
 # Task 3: Word embeddings for ranking
@@ -462,13 +499,11 @@ create_all_run_files()
 
 # TODO: Load model and stuff
 
-
 class VectorCollection:
 
     def __init__(self, word_vectors, context_vectors):
         self.word_vectors = word_vectors
         self.context_vectors = context_vectors
-
 
 def calculate_document_centroids(pyndri_index, vector_collection, stop_words=tuple(),
                                  vector_func=lambda word, collection: collection.word_vectors[word]):
@@ -491,7 +526,6 @@ def calculate_document_centroids(pyndri_index, vector_collection, stop_words=tup
         centroids[document_id] = centroid
 
     return centroids
-
 
 def score_by_summing(query_token_ids, pyndri_index, vector_collection,
                      vector_func_query=lambda word, collection: collection.word_vectors[word],
@@ -520,7 +554,6 @@ def score_by_summing(query_token_ids, pyndri_index, vector_collection,
         document_scores.append((score, ext_doc_id))
 
     return document_scores
-
 
 def score_by_centroids(query_token_ids, pyndri_index, vector_collection, document_centroids, stop_words=tuple(),
                        vector_func_query=lambda word, collection: collection.word_vectors[word], **kwargs):
