@@ -2,26 +2,26 @@
 #  Homework 2 Python file
 # -----------------------
 
+import collections
+import io
+import logging
+import os
 # -----------------------
 #  Pre-handed code
 # -----------------------
 import sys
-import os
-import io
-import logging
-import collections
-
-### Pyndri primer
-import pyndri
-
 import time
-
 from math import log
 
 import numpy as np
+### Pyndri primer
+import pyndri
 
 from PLM import PLM
+from embeddings import save_document_representations, precomputed_document_representations_win, \
+    precomputed_document_representations_wout
 from kernels import k_gaussian
+
 
 # Funtion to generate run and write it to out_f
 def write_run(model_name, data, out_f,
@@ -266,9 +266,10 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
     if model_name == "PLM":
         # Should probably just make this one of the global variables
         query_word_positions = retrieval_func_params["query_word_positions"]
-        kernel = k_gaussian
-        if "kernel" in retrieval_func_params:
-            kernel = retrieval_func_params["kernel"]
+        kernel = retrieval_func_params.get("kernel", k_gaussian)
+    elif model_name == "Embeddings":
+        # TODO: Fetch Embedding parameters here
+        pass
 
     start = time.time()
 
@@ -282,6 +283,7 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
         for n, document_id in enumerate(document_ids):
             ext_doc_id, document_word_positions = index.document(document_id)
             score = 0
+            # TODO: Add embedding scoring
             if model_name == "PLM":  # PLMs need the query in it's entirety
                 if n % 100 == 0:
                     print("\rScoring document {} out of {} documents ({:.2f} %)".format(
@@ -409,7 +411,6 @@ def absolute_discounting(document_id, term_id, document_term_freq, tuning_parame
     number_of_unique_terms = num_unique_words[document_id]
     return max(document_term_freq - discount, 0) / d + ((discount * number_of_unique_terms) / d) * (tf_C[term_id] / total_number_of_documents)
 
-import cProfile as profile
 
 # profile.run("run_retrieval('PLM', None, document_ids=document_ids, query_word_positions=query_word_positions)", sort=True)
 
@@ -440,7 +441,7 @@ def create_all_run_files():
 
     # TODO PLM when it is ready
 
-create_all_run_files()
+#create_all_run_files()
 
 # TODO implement tools to help you with the analysis of the results.
 
@@ -454,143 +455,6 @@ create_all_run_files()
 # Task 3: Word embeddings for ranking
 # -----------------------------------
 
-# TODO: Load model and stuff
-
-# Combination functions to combine document word embeddings and pre-compute them
-
-
-def doc_convolve(vectors):
-    start_vec, vecs_to_convolve = vectors[0], vectors[1:]
-
-    for vec in vecs_to_convolve:
-        start_vec = np.convolve(start_vec, vec, "same")
-
-    return start_vec
-
-
-def doc_centroid(vectors):
-    return np.sum(vectors) / len(vectors)
-
-
-def doc_min(vectors):
-    return np.minimum.reduce(*vectors)
-
-
-def doc_max(vectors):
-    return np.maximum.reduce(*vectors)
-
-
-class VectorCollection:
-
-    def __init__(self, word_vectors, context_vectors):
-        self.word_vectors = word_vectors
-        self.context_vectors = context_vectors
-
-
-def calculate_document_representations(pyndri_index, vector_collection, *combination_funcs, stop_words=tuple(),
-                                       vector_func=lambda word, collection: collection.word_vectors[word]):
-    representations = {func.__name__: dict() for func in combination_funcs}
-
-    token2id, id2token, _ = pyndri_index.get_dictionary()
-
-    stop_word_ids = []
-    if len(stop_words) > 0:
-        stop_word_ids.extend([token2id[stop_word] for stop_word in stop_words])
-        stop_word_ids = set(stop_word_ids)
-
-    for document_id in range(pyndri_index.document_base(), pyndri_index.maximum_document()):
-        ext_doc_id, token_ids = pyndri_index.document(document_id)
-        _, id2token, _ = pyndri_index.get_dictionary()
-
-        token_ids = [token_id for token_id in token_ids if token_id not in stop_word_ids]  # Filter out stop words
-        vectors = [vector_func(id2token[token_id], vector_collection) for token_id in token_ids]
-
-        for func in combination_funcs:
-            representations[func.__name__][document_id] = func(vectors)
-
-    return representations
-
-
-def score_embeddings(query_token_ids, pyndri_index, vector_collection,
-                     vector_func_query=lambda word, collection: collection.word_vectors[word],
-                     vector_func_doc=lambda word, collection: collection.word_vectors[word],
-                     vector_combination_func=lambda vectors: np.sum(vectors), **kwargs):
-    """
-    Score a query and documents by taking the word embeddings of the words they contain and simply sum them,
-    afterwards comparing the summed vectors with cosine similarity.
-    """
-    # Get query vector
-    _, id2token, _ = pyndri_index.get_dictionary()
-    # Just sum
-    query_vectors = [
-        vector_func_query(id2token[query_token_id], vector_collection) for query_token_id in query_token_ids
-    ]
-    query_vector = vector_combination_func(query_vectors)
-
-    # Score documents
-    document_scores = []
-    for document_id in range(pyndri_index.document_base(), pyndri_index.maximum_document()):
-        ext_doc_id, token_ids = pyndri_index.document(document_id)
-
-        document_vectors = [vector_func_doc(id2token[token_id], vector_collection) for token_id in token_ids]
-        document_vector = vector_combination_func(document_vectors)
-        score = cosine_similarity(query_vector, document_vector)
-
-        document_scores.append((score, ext_doc_id))
-
-    return document_scores
-
-
-def score_by_summing(query_token_ids, pyndri_index, vector_collection,
-                     vector_func_query=lambda word, collection: collection.word_vectors[word],
-                     vector_func_doc=lambda word, collection: collection.word_vectors[word], **kwargs):
-    """
-    Score a query and documents by taking the word embeddings of the words they contain and simply sum them,
-    afterwards comparing the summed vectors with cosine similarity.
-    """
-    return score_embeddings(query_token_ids, pyndri_index, vector_collection, vector_func_query, vector_func_doc)
-
-
-def score_by_centroids(query_token_ids, pyndri_index, vector_collection, document_centroids, stop_words=tuple(),
-                       vector_func_query=lambda word, collection: collection.word_vectors[word], **kwargs):
-    """
-    Score a query and documents by taking the word embeddings of the words they contain and calculate the centroids.
-    Finally, compare the centroids using cosine similarities.
-    """
-    # Get query vector
-    token2id, id2token, _ = pyndri_index.get_dictionary()
-
-    # Remove stopwords from query / documents
-    stop_word_ids = []
-    if len(stop_words) > 0:
-        stop_word_ids.extend([token2id[stop_word] for stop_word in stop_words])
-
-    # Just sum
-    # Filter out stop words
-    query_token_ids = [query_token_id for query_token_id in query_token_ids if query_token_id not in stop_word_ids]
-    query_vector = sum([
-        vector_func_query(id2token[query_token_id], vector_collection) for query_token_id in query_token_ids
-    ]) / len(query_token_ids)
-
-    # Score documents
-    document_scores = []
-    for document_id in range(pyndri_index.document_base(), pyndri_index.maximum_document()):
-        ext_doc_id, token_ids = pyndri_index.document(document_id)
-
-        document_vector = document_centroids[document_id]
-        score = cosine_similarity(query_vector, document_vector)
-
-        document_scores.append((score, ext_doc_id))
-
-    return document_scores
-
 # ------------------------------
 # Task 4: Learning to rank (LTR)
 # ------------------------------
-
-
-# --------------------
-# Task 5: Write report
-# --------------------
-
-# Overleaf link: https://www.overleaf.com/13270283sxmcppswgnyd#/51107064/
