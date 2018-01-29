@@ -258,9 +258,6 @@ else:
     lda_corpora = gensim.corpora.MmCorpus('lda_corpora.mm')
     lda = gensim.models.LdaModel.load('lda.model')
 
-
-similarity_index_file = 'sim_index.index'
-
 if not os.path.isfile('sim_index.index'):
     similarity_index = Similarity('./sim_index/', lsi_corpora, NUM_TOPICS)
     similarity_index.save('sim_index.index')
@@ -296,5 +293,43 @@ with open('./lexical_results/{}'.format(run_out_path), 'w') as f_out:
     write_run(
         model_name='LSI',
         data=lsi_reranking,
+        out_f=f_out,
+        max_objects_per_query=1000)
+
+if not os.path.isfile('lda_sim.index'):
+    similarity_index = Similarity('./sim_index/', lda_corpora, NUM_TOPICS)
+    similarity_index.save('lda_sim.index')
+else:
+    similarity_index = Similarity.load('lda_sim.index')
+
+def lda_score(ranked_queries, similarity_index):
+    lda_reranking = collections.defaultdict(list)
+    similarity_index.num_best = None
+
+    for query_id, docs in ranked_queries.items():
+        query_terms = [id2token[term_id] for term_id in tokenized_queries[query_id]]
+        query_bow = dictionary.doc2bow(query_terms)
+        query_lda = lda[query_bow]
+
+        # Get similarity of query with all documents
+        sims = similarity_index[query_lda]
+
+        for document_id in document_ids:
+            ext_doc_id, _ = index.document(document_id)
+            lda_reranking[query_id].append((sims[document_id-1], ext_doc_id))
+
+    for query_id in lda_reranking:
+        lda_reranking[query_id] = list(sorted(lda_reranking[query_id], reverse=True))[:1000]
+
+    return lda_reranking
+
+run_out_path = '{}.run'.format('LDA')
+
+lda_reranking = lda_score(ranked_queries = tfidf_ranking, similarity_index=similarity_index)
+
+with open('./lexical_results/{}'.format(run_out_path), 'w') as f_out:
+    write_run(
+        model_name='LDA',
+        data=lda_reranking,
         out_f=f_out,
         max_objects_per_query=1000)
