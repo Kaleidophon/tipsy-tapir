@@ -1,3 +1,4 @@
+# Imports
 import pyndri
 import pyndri.compat
 
@@ -6,25 +7,7 @@ from gensim import corpora
 from gensim import models
 from gensim.models import lsimodel
 from gensim.models import ldamodel
-from gensim.models import tfidfmodel
-from gensim.similarities import MatrixSimilarity, SparseMatrixSimilarity, Similarity
-
-import os
-import sys
-import io
-import logging
-import collections
-import time
-import heapq
-from operator import itemgetter
-
-from math import log
-
-import numpy as np
-
-
-token2id, id2token, id2df = index.get_dictionary()
-document_ids = list(range(index.document_base(), index.maximum_document()))
+from gensim.similarities import Similarity
 
 # File Locations
 dict_file = './LSM/dictionary.dict'
@@ -40,8 +23,8 @@ lda_sim_file = './LSM/lda_sim.index'
 LSI_TOPICS = 200
 LDA_TOPICS = 100
 
-# Connector class.
 class CorpusConnector:
+
     def __init__(self, index):
         self.index = index
         dictionary = pyndri.extract_dictionary(self.index)
@@ -84,7 +67,6 @@ class LSM:
         self.model = None
         self.corpora = None
         self.similarity_index = None
-        self.num_topics =
 
     def create_model(self):
         if not os.path.isfile(self.model_file):
