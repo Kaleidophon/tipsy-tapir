@@ -250,7 +250,7 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
 
     # XXX: fill the data dictionary.
     # The dictionary data should have the form: query_id --> (document_score, external_doc_id)
-    if model_name == "PLM":
+    if "PLM" in model_name:
         # Should probably just make this one of the global variables
         query_word_positions = retrieval_func_params["query_word_positions"]
         kernel = retrieval_func_params.get("kernel", k_gaussian)
@@ -278,7 +278,7 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
 
             score = 0
             # TODO: Add embedding scoring
-            if model_name == "PLM":  # PLMs need the query in it's entirety
+            if "PLM" in model_name:  # PLMs need the query in it's entirety
                 # if n % 100 == 0:
                     # print("\rScoring document {} out of {} documents ({:.2f} %)".format(
                     #         document_id, index.maximum_document(), document_id / index.maximum_document() * 100
@@ -481,7 +481,7 @@ def LM_absolute_discounting(document_id, term_id, document_term_freq, tuning_par
     discount = tuning_parameter
     d = index.document_length(document_id)
     C = collection_length
-    if d == 0: return 0
+    if d == 0: return -9999
     number_of_unique_terms = num_unique_words[document_id]
 
     return np.log(max(document_term_freq - discount, 0) / d + ((discount * number_of_unique_terms) / d) * (tf_C[term_id] / C))
@@ -501,13 +501,7 @@ def create_all_lexical_run_files():
     end = time.time()
     print("Retrieval took {:.2f} seconds.".format(end-start))
 
-    j_m__lambda_values = [0.1, 0.3, 0.5, 0.7, 0.9]
-    for val in j_m__lambda_values:
-        start = time.time()
-        print("Running LM_jelinek", val)
-        run_retrieval('LM_jelinek_mercer_smoothing_{}'.format(str(val).replace(".", "_")), LM_jelinek_mercer_smoothing, document_ids, tuning_parameter=val)
-        end = time.time()
-        print("Retrieval took {:.2f} seconds.".format(end-start))
+    run_all_jelenik_mercer()
 
     dirichlet_values = [500, 1000, 1500]
     for val in dirichlet_values:
@@ -517,7 +511,19 @@ def create_all_lexical_run_files():
         end = time.time()
         print("Retrieval took {:.2f} seconds.".format(end-start))
 
-    absolute_discounting_values = j_m__lambda_values
+    run_all_abs_disc()
+
+def run_all_jelenik_mercer():
+    j_m__lambda_values = [0.1, 0.3, 0.5, 0.7, 0.9]
+    for val in j_m__lambda_values:
+        start = time.time()
+        print("Running LM_jelinek", val)
+        run_retrieval('jelinek_mercer_{}'.format(str(val).replace(".", "_")), LM_jelinek_mercer_smoothing, document_ids, tuning_parameter=val)
+        end = time.time()
+        print("Retrieval took {:.2f} seconds.".format(end-start))
+
+def run_all_abs_disc():
+    absolute_discounting_values = [0.1, 0.3, 0.5, 0.7, 0.9]
     for val in absolute_discounting_values:
         start = time.time()
         print("Running ABS_discount", val)
@@ -525,6 +531,10 @@ def create_all_lexical_run_files():
         end = time.time()
         print("Retrieval took {:.2f} seconds.".format(end-start))
 
+    run_all_PLM_runs()
+
+
+def run_all_PLM_runs():
     start = time.time()
     run_retrieval('PLM_passage', None, document_ids=document_ids, query_word_positions=query_word_positions, kernel=k_passage)
     end = time.time()
@@ -549,9 +559,6 @@ def create_all_lexical_run_files():
     run_retrieval('PLM_circle', None, document_ids=document_ids, query_word_positions=query_word_positions, kernel=k_circle)
     end = time.time()
     print("Retrieval took {:.2f} seconds.".format(end-start))
-
-#create_all_lexical_run_files()
-
 
 def run_retrieval_embeddings_So(index, model_name, queries, document_ids, id2token, vector_collection,
                              document_representations, combination_func, doc2repr=None):
@@ -869,7 +876,6 @@ def score_by_centroids(query_token_ids, pyndri_index, vector_collection, documen
 # Task 4: Learning to rank (LTR)
 # ------------------------------
 
-# TODO implement the rest of the retrieval functions
 
 # TODO implement tools to help you with the analysis of the results.
 
