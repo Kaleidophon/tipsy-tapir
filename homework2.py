@@ -24,7 +24,6 @@ from plm import PLM
 # GLOBALS
 rankings = collections.defaultdict(lambda: collections.defaultdict(list))
 
-
 # Function to generate run and write it to out_f
 def write_run(model_name, data, out_f,
               max_objects_per_query=sys.maxsize,
@@ -379,8 +378,7 @@ def LM_dirichlet_smoothing(index, query_id, document_id, document_term_freqs, co
 
     return log_sum
 
-
-def absolute_discounting(index, query_id, document_id, document_term_freq, num_unique_words, collection_length,
+def LM_absolute_discounting(index, query_id, document_id, document_term_freq, num_unique_words, collection_length,
                          tokenized_queries, tuning_parameter=0.1):
     log_sum = 0
 
@@ -416,7 +414,7 @@ def create_all_lexical_run_files(index, document_ids, queries, document_term_fre
     start = time.time()
     print("Running BM25")
     run_retrieval(
-        index, 'BM25', queries, document_ids, bm25,
+        index, 'bm25', queries, document_ids, bm25,
         document_term_freqs=document_term_freqs, avg_doc_length=avg_doc_length, id2df=id2df,
         num_documents=num_documents, tokenized_queries=tokenized_queries
     )
@@ -428,7 +426,7 @@ def create_all_lexical_run_files(index, document_ids, queries, document_term_fre
         start = time.time()
         print("Running LM_jelinek", val)
         run_retrieval(
-            index, 'jelinek_mercer_{}'.format(str(val).replace(".", "_")),
+            index, 'LM_jelinek_mercer_smoothing_{}'.format(str(val).replace(".", "_")),
             queries, document_ids, LM_jelinek_mercer_smoothing,
             tuning_parameter=val, document_term_freqs=document_term_freqs, collection_length=collection_length,
             tf_C=tf_C, tokenized_queries=tokenized_queries
@@ -441,7 +439,7 @@ def create_all_lexical_run_files(index, document_ids, queries, document_term_fre
         start = time.time()
         print("Running Dirichlet", val)
         run_retrieval(
-            index, 'dirichlet_mu_{}'.format(str(val).replace(".", "_")),
+            index, 'LM_dirichelt_smoothing_{}'.format(str(val).replace(".", "_")),
             document_ids, queries, LM_dirichlet_smoothing,
             tuning_parameter=val, document_term_freqs=document_term_freqs, collection_length=collection_length,
             tokenized_queries=tokenized_queries
@@ -453,7 +451,7 @@ def create_all_lexical_run_files(index, document_ids, queries, document_term_fre
     for val in absolute_discounting_values:
         start = time.time()
         print("Running ABS_discount", val)
-        run_retrieval('abs_disc_delta_{}'.format(str(val).replace(".", "_")), absolute_discounting, document_ids, tuning_parameter=val)
+        run_retrieval('LM_absolute_discounting_{}'.format(str(val).replace(".", "_")), LM_absolute_discounting, document_ids, tuning_parameter=val)
         end = time.time()
         print("Retrieval took {:.2f} seconds.".format(end-start))
 
