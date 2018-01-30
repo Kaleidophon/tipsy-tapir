@@ -313,7 +313,109 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
             model_name=model_name,
             data=ranking[model_name],
             out_f=f_out,
-            max_objects_per_query=1000)
+            max_objects_per_query=max_objects_per_query)
+
+    print("Done writing results to run file")
+
+    end = time.time()
+    print("Retrieval took {:.2f} seconds.".format(end-start))
+    return
+
+
+def run_retrieval2(index, model_name, queries, document_ids, scoring_func, max_objects_per_query=1000,
+                   **resource_params):
+    """
+    Runs a retrieval method for all the queries and writes the TREC-friendly results in a file.
+
+    :param index: Pyndri index object.
+    :type index: pyndri.Index
+    :param model_name: Name of the model (used for screen printing).
+    :type model_name: str
+    :param queries: Queries to be evaluated.
+    :type queries: dict
+    :param document_ids: Collection of document ids in data set.
+    :type document_ids: list or set or tuple
+    :param scoring_func: Function that uses the prepared resources, query and document id to score a query and a doc.
+    :type scoring_func: func
+    :param max_objects_per_query: Only keep a certain number of best ranked documents per query.
+    :type max_objects_per_query: int
+    :param resource_params: Named arguments that are used to build resources used by the model for scoring.
+    :type resource_params: dict
+    """
+    run_out_path = '{}.run'.format(model_name)
+
+    run_id = 0
+    while os.path.exists(run_out_path):
+        run_id += 1
+        run_out_path = '{}_{}.run'.format(model_name, run_id)
+
+    print('Retrieving using', model_name)
+
+    # The dictionary data should have the form: query_id --> (document_score, external_doc_id)
+    data = {}
+
+    start = time.time()
+    query_times = 0
+    n_queries = len(queries)
+
+    for i, query in enumerate(queries.items()):
+        query_start_time = time.time()
+        query_id, _ = query
+        query_scores = []
+
+        # Do actual scoring here
+        for n, document_id in enumerate(document_ids):
+            ext_doc_id, document_word_positions = index.document(document_id)
+            score = scoring_func(index, query_id, document_id, **resource_params)
+            query_scores.append((score, ext_doc_id))
+
+        data[query_id] = list(sorted(query_scores, reverse=True))[:max_objects_per_query]
+
+        query_end_time = time.time()
+        query_time = query_end_time - query_start_time
+        query_times += query_time
+        average_query_time = query_times / max(i, 1)
+        querys_left = len(queries) - i
+        time_left = average_query_time * querys_left
+        m, s = divmod(time_left, 60)
+        h, m = divmod(m, 60)
+        print(
+            "\rAverage query time for query {} out of {}: {:.2f} seconds. {} hour(s), {} minute(s) and {:.2f} seconds "
+            "remaining for {} queries.".format(
+                i+1, n_queries, average_query_time, int(h), int(m), s, querys_left
+            ), flush=True, end=""
+        )
+
+    # Write results
+    with open('./lexical_results/{}'.format(run_out_path), 'w') as f_out:
+        write_run(
+            model_name=model_name,
+            data=data,
+            out_f=f_out,
+            max_objects_per_query=max_objects_per_query)
+
+    print("Done writing results to run file")
+
+    end = time.time()
+    print("Retrieval took {:.2f} seconds.".format(end-start))
+    return data
+
+
+def generate_query_likelihood_model():
+    counter = collections.Counter()
+
+    for query in queries.items():
+        query_id, _ = query
+        query_term_ids = tokenized_queries[query_id]
+
+        for query_term_id in query_term_ids:
+            counter[query_term_id] += 1
+
+    total_elements = len(counter.items())
+    model = {query_term_id : count / total_elements for query_term_id, count in counter.items()}
+    # If a term has never been a part of a query we assign it probability 0 in the query model
+    model = collections.defaultdict(int, model)
+    return model
 
 def idf(term_id):
     df_t = id2df[term_id]
@@ -448,11 +550,142 @@ def create_all_lexical_run_files():
     end = time.time()
     print("Retrieval took {:.2f} seconds.".format(end-start))
 
-create_all_lexical_run_files()
+#create_all_lexical_run_files()
 
-# TODO implement tools to help you with the analysis of the results.
 
-# End of provided functions
+def run_retrieval_embeddings_So(index, model_name, queries, document_ids, id2token, vector_collection,
+                             document_representations, combination_func, doc2repr=None):
+    def score_func(index, query_id, document_id, **resource_params):
+        id2token = resource_params["id2token"]
+        vector_collection = resource_params["vector_collection"]
+        tokenized_queries = resource_params["tokenized_queries"]
+        query_token_ids = tokenized_queries[query_id]
+        doc2repr = resource_params.get("doc2repr", None)
+        vector_func_query = resource_params.get(
+            "vector_func_query", lambda word, collection: collection.word_vectors[word]
+        )
+        query_vectors = []
+        for query_token_id in query_token_ids:
+            if query_token_id == 0: continue
+            try:
+                query_vectors.append(vector_func_query(id2token[query_token_id], vector_collection))
+            except KeyError:
+                # OOV word
+                continue
+        if len(query_vectors) == 0: return -1
+
+        query_vector = combination_func(query_vectors)
+        try:
+            lookup_id = document_id if doc2repr is None else doc2repr[document_id]
+            document_vector = document_representations[lookup_id]
+        except KeyError as ie:
+            # Empty documents, give worst score
+            return -1
+
+        return cosine_similarity(query_vector, document_vector)
+
+    return run_retrieval2(
+        index, model_name, queries, document_ids, score_func,
+        # Named key word arguments to build as resources before scoring
+        id2_token=id2token, vector_collection=vector_collection, document_representations=document_representations,
+        combination_func=combination_func, doc2repr=doc2repr
+    )
+
+
+def run_retrieval_embeddings_Savg(index, model_name, queries, document_ids, id2token, vector_collection,
+                             document_representations, tokenized_queries, doc2repr=None):
+    def score_func(index, query_id, document_id, **resource_params):
+        id2token = resource_params["id2token"]
+        vector_collection = resource_params["vector_collection"]
+        tokenized_queries = resource_params["tokenized_queries"]
+        doc2repr = resource_params.get("doc2repr", None)
+        query_token_ids = tokenized_queries[query_id]
+        vector_func_query = resource_params.get(
+            "vector_func_query", lambda word, collection: collection.word_vectors[word]
+        )
+        query_vectors = []
+        for query_token_id in query_token_ids:
+            if query_token_id == 0: continue
+            try:
+                query_vectors.append(vector_func_query(id2token[query_token_id], vector_collection))
+            except KeyError:
+                # OOV word
+                continue
+        if len(query_vectors) == 0: return -1
+
+        try:
+            lookup_id = document_id if doc2repr is None else doc2repr[document_id]
+            document_vector = document_representations[lookup_id]
+        except KeyError as ie:
+            # Empty documents, give worst score
+            return -1
+
+        return sum(
+            [cosine_similarity(query_vector, document_vector) for query_vector in query_vectors]
+        ) / len(query_vectors)
+
+    return run_retrieval2(
+        index, model_name, queries, document_ids, score_func,
+        # Named key word arguments to build as resources before scoring
+        id2token=id2token, vector_collection=vector_collection, document_representations=document_representations,
+        tokenized_queries=tokenized_queries, doc2repr=doc2repr
+    )
+
+
+def run_retrieval_plm(index, model_name, queries, document_ids, query_word_positions, background_model,
+                      tokenized_queries, kernel=k_gaussian):
+    def score_func(index, query_id, document_id, **resource_params):
+        query_word_positions = resource_params["query_word_positions"]
+        background_model = resource_params.get("background_model", None)
+        document_length = index.document_length(document_id)
+        plm = PLM(
+            query_term_ids, document_length, query_word_positions[document_id][int(query_id)],
+            background_model=background_model, kernel=kernel
+        )
+        score = plm.best_position_strategy_score()
+        return score
+
+    return run_retrieval2(
+        index, model_name, queries, document_ids, score_func=score_func,
+        # Named key word arguments to build as resources before scoring
+        query_word_positions=query_word_positions, kernel=kernel, background_model=background_model,
+        tokenized_queries=tokenized_queries
+    )
+
+
+def create_document_id_to_repr_map(document_ids):
+    """
+    Compensate for empty documents in document collections.
+    Because of using hd5 storage, we can only store vectors of the same length, so no zero-length vectors for empty
+    documents. Because they were disregarded during the strorage procedure, the alignment between document ids and
+    indices of the list with their vector representations is now off and has to be fixed.
+
+    It's a little dirty and hack-y, but was the best solution given the time constraint.
+    """
+    empty_ids = {93688, 102435, 104040, 121863, 121866, 122113, 147904, 149905, 153512, 154467, 155654}
+    doc2repr = dict()
+
+    zone = 1
+    for i in range(1, len(document_ids)+1):
+        if i in empty_ids:
+            zone += 1
+            continue
+
+        doc2repr[i] = i - zone
+
+    return doc2repr
+
+#run_retrieval_plm("PLM", index, queries, document_ids, query_word_positions, background_model=None)
+from embeddings import doc_centroid, VectorCollection, load_document_representations
+vectors = VectorCollection.load_vectors("./w2v_60")
+doc2repr = create_document_id_to_repr_map(document_ids)
+doc_representations = load_document_representations("./win_representations_1_4")
+run_retrieval_embeddings_Savg(
+    index, "embeddings_Savg", queries, document_ids, id2token=id2token, vector_collection=vectors,
+    document_representations=doc_representations.get("doc_centroid"), tokenized_queries=tokenized_queries,
+    doc2repr=doc2repr
+)
+
 
 # ------------------------------
 # Task 2: Latent Semantic Models
