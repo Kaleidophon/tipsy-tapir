@@ -9,6 +9,8 @@ from gensim.models import lsimodel
 from gensim.models import ldamodel
 from gensim.similarities import Similarity
 
+import os
+
 # File Locations
 dict_file = './LSM/dictionary.dict'
 mm_corpus_file = './LSM/corpus.mm'
@@ -28,12 +30,12 @@ class CorpusConnector:
     def __init__(self, index):
         self.index = index
         dictionary = pyndri.extract_dictionary(self.index)
-        docs = pyndri.compat.IndriSentences(self.index, dictionary)
-        self.dictionary = corpora.Dictionary(docs)
+        self.docs = pyndri.compat.IndriSentences(self.index, dictionary)
+        self.dictionary = corpora.Dictionary(self.docs)
         self.dictionary.filter_extremes(no_below=5)
 
     def __iter__(self):
-        for doc in docs:
+        for doc in self.docs:
             yield self.dictionary.doc2bow(doc)
 
     def save_dict(self):
@@ -55,7 +57,7 @@ class LSM:
             self.similarity_file = lda_sim_file
             self.num_topics = LDA_TOPICS
 
-        if not os.path.isfile(mm_corpus_file):
+        if not os.path.isfile(mm_corpus_file) or not os.path.isfile(dict_file):
             self.corpus = CorpusConnector(index)
             corpora.MmCorpus.serialize(mm_corpus_file, self.corpus)
             self.corpus.save_dict()
@@ -89,7 +91,7 @@ class LSM:
 
     def create_similarity_index(self):
         if not os.path.isfile(self.similarity_file):
-            self.similarity_index = Similarity('LSM', self.corpora, self.num_topics)
+            self.similarity_index = Similarity('./LSM/', self.corpora, self.num_topics)
             self.similarity_index.save(self.similarity_file)
         else:
             self.similarity_index = Similarity.load(self.similarity_file)

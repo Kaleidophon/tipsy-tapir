@@ -350,7 +350,7 @@ def generate_query_likelihood_model():
 
 def idf(term_id):
     df_t = id2df[term_id]
-    return log(total_number_of_documents) - log(df_t)
+    return log(num_documents) - log(df_t)
 
 def tf_idf(_, term_id, document_term_freq, tuning_parameter=None):
     return log(1 + document_term_freq) * idf(term_id)
@@ -414,7 +414,7 @@ def absolute_discounting(document_id, term_id, document_term_freq, tuning_parame
     d = index.document_length(document_id)
     if d == 0: return 0
     number_of_unique_terms = num_unique_words[document_id]
-    return max(document_term_freq - discount, 0) / d + ((discount * number_of_unique_terms) / d) * (tf_C[term_id] / total_number_of_documents)
+    return max(document_term_freq - discount, 0) / d + ((discount * number_of_unique_terms) / d) * (tf_C[term_id] / num_documents)
 
 def create_all_run_files():
     print("##### Creating all run files! #####")
@@ -473,7 +473,7 @@ def lsm_reranking(ranked_queries, LSM_model):
 
 # LSI
 start = time.time()
-lsi = ('LSI', index)
+lsi = LSM('LSI', index)
 lsi.create_model()
 end = time.time()
 print("LSI model creation took {:.2f} seconds.".format(end-start))
@@ -499,10 +499,9 @@ with open('./lexical_results/{}'.format(run_out_path), 'w') as f_out:
 end = time.time()
 print("LSI run file creation {:.2f} seconds.".format(end-start))
 
-
 # LDA
 start = time.time()
-lda = ('LDA', index)
+lda = LSM('LDA', index)
 lda.create_model()
 end = time.time()
 print("LDA model creation took {:.2f} seconds.".format(end-start))
