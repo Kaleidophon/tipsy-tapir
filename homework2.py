@@ -16,7 +16,7 @@ import numpy as np
 import pyndri
 
 # PROJECT
-from embeddings import doc_centroid, VectorCollection, load_document_representations
+from embeddings import doc_kmeans, doc_centroid, doc_tfidf_scaling, VectorCollection, load_document_representations
 from kernels import k_passage, k_gaussian, k_cosine, k_triangle, k_circle
 from lsm import LSM
 from plm import PLM
@@ -589,7 +589,8 @@ def create_latent_semantic_model_runfiles():
 
 
 def run_retrieval_embeddings_So(index, model_name, queries, document_ids, id2token, vector_collection,
-                                document_representations, combination_func, doc2repr=None):
+                                document_representations, tokenized_queries, combination_func, doc2repr=None,
+                                **resource_params):
     def score_func(index, query_id, document_id, **resource_params):
         id2token = resource_params["id2token"]
         vector_collection = resource_params["vector_collection"]
@@ -610,7 +611,10 @@ def run_retrieval_embeddings_So(index, model_name, queries, document_ids, id2tok
         if len(query_vectors) == 0:
             return -1
 
-        query_vector = combination_func(query_vectors)
+        query_vector = combination_func(query_vectors, token_ids=tokenized_queries[query_id], **resource_params)
+        if type(query_vector) == tuple:
+            query_vector, _ = query_vector
+
         try:
             lookup_id = document_id if doc2repr is None else doc2repr[document_id]
             document_vector = document_representations[lookup_id]
@@ -623,8 +627,8 @@ def run_retrieval_embeddings_So(index, model_name, queries, document_ids, id2tok
     return run_retrieval(
         index, model_name, queries, document_ids, score_func,
         # Named key word arguments to build as resources before scoring
-        id2_token=id2token, vector_collection=vector_collection, document_representations=document_representations,
-        combination_func=combination_func, doc2repr=doc2repr
+        id2token=id2token, vector_collection=vector_collection, document_representations=document_representations,
+        combination_func=combination_func, doc2repr=doc2repr, tokenized_queries=tokenized_queries, **resource_params
     )
 
 
@@ -743,20 +747,23 @@ if __name__ == "__main__":
     # TODO: Which of these data strucutre is document_term_freq(s) used for lexical models??
     document_term_freqs = inverted_index  # TODO: This one is my best guess
 
-    create_all_lexical_run_files(
-        index, document_ids, queries, document_term_freqs, collection_length, tf_C,
-        tokenized_queries, background_model=tf_C, idf2df=id2df, num_documents=num_documents
-    )
+    # create_all_lexical_run_files(
+    #     index, document_ids, queries, document_term_freqs, collection_length, tf_C,
+    #     tokenized_queries, background_model=tf_C, idf2df=id2df, num_documents=num_documents
+    # )
     # TODO: Is really backgroundmodel = tf_C ??
 
     # run_retrieval_plm("PLM", index, queries, document_ids, query_word_positions, background_model=None)
-    # print("Reading word embeddings...")
-    # vectors = VectorCollection.load_vectors("./w2v_60")
-    # doc2repr = create_document_id_to_repr_map(document_ids)
-    # print("Reading document representations...")
-    # doc_representations = load_document_representations("./win_representations_1_4")
-    # run_retrieval_embeddings_Savg(
-    #     index, "embeddings_Savg", queries, document_ids, id2token=id2token, vector_collection=vectors,
-    #     document_representations=doc_representations.get("doc_centroid"), tokenized_queries=tokenized_queries,
-    #     doc2repr=doc2repr
-    # )
+
+    del tf_C, query_terms_inverted, unique_terms_per_document, query_word_positions, document_length
+    print("Reading word embeddings...")
+    vectors = VectorCollection.load_vectors("./w2v_60")
+    doc2repr = create_document_id_to_repr_map(document_ids)
+    print("Reading document representations...")
+    doc_representations = load_document_representations("./win_representations_5_7")
+    run_retrieval_embeddings_So(
+        index, "embeddings_So_kmeans_win", queries, document_ids, id2token=id2token, vector_collection=vectors,
+        document_representations=doc_representations.get("doc_kmeans"), tokenized_queries=tokenized_queries,
+        doc2repr=doc2repr, combination_func=doc_kmeans,
+        document_term_freqs=inverted_index, id2df=id2df, number_of_documents=num_documents, cache=dict()
+    )

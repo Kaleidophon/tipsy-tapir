@@ -1,4 +1,4 @@
-relative_trec_eval_path=~/Downloads/trec_eval/trec_eval
+relative_trec_eval_path=~/Desktop/ir/tipsy-tapir/trec_eval
 
 run_single_evaluation () {
   $relative_trec_eval_path -m all_trec -q ap_88_89/qrel_test ./lexical_results/"$1".run | grep "\sall\s" > ./lexical_results/"$1"_results.txt
@@ -19,27 +19,31 @@ run_dirichlet () {
 }
 
 # Run tfidf evaluation
-run_single_evaluation "tfidf"
+#run_single_evaluation "tfidf"
 
 # BM25
-run_single_evaluation "BM25"
+#run_single_evaluation "BM25"
 
 # Jelinek-Mercer
-run_parameters_between_1 "jelinek_mercer"
+#run_parameters_between_1 "jelinek_mercer"
 
 # Dirichlet
-run_dirichlet "dirichlet_mu"
+#run_dirichlet "dirichlet_mu"
 
 # Absolute discounting
-run_parameters_between_1 "abs_disc_delta"
+#run_parameters_between_1 "abs_disc_delta"
 
 # PLM
-run_single_evaluation "PLM_passage"
+#run_single_evaluation "PLM_passage"
 
-run_single_evaluation "PLM_gaussian"
+#run_single_evaluation "PLM_gaussian"
 
-run_single_evaluation "PLM_triangle"
+#run_single_evaluation "PLM_triangle"
 
-run_single_evaluation "PLM_cosine"
+#run_single_evaluation "PLM_cosine"
 
-run_single_evaluation "PLM_circle"
+#run_single_evaluation "PLM_circle"
+
+# Word embedding
+run_single_evaluation "embeddings_Savg.run"
+run_single_evaluation "embeddings_So.run"
