@@ -21,6 +21,9 @@ from kernels import k_passage, k_gaussian, k_cosine, k_triangle, k_circle
 from lsm import LSM
 from plm import PLM
 
+# GLOBALS
+rankings = collections.defaultdict(lambda: collections.defaultdict(list))
+
 
 # Function to generate run and write it to out_f
 def write_run(model_name, data, out_f,
@@ -71,6 +74,7 @@ def write_run(model_name, data, out_f,
                     rank=rank + 1,
                     relevance=relevance,
                     model_name=model_name))
+
 
 # Function to parse the query file
 def parse_topics(file_or_files,
@@ -227,6 +231,8 @@ def run_retrieval(index, model_name, queries, document_ids, scoring_func, max_ob
     :param resource_params: Named arguments that are used to build resources used by the model for scoring.
     :type resource_params: dict
     """
+    # The dictionary data should have the form: model_name --> query_id --> (document_score, external_doc_id)
+    global rankings
     run_out_path = '{}.run'.format(model_name)
 
     run_id = 0
@@ -235,10 +241,6 @@ def run_retrieval(index, model_name, queries, document_ids, scoring_func, max_ob
         run_out_path = '{}_{}.run'.format(model_name, run_id)
 
     print('Retrieving using', model_name)
-
-    # The dictionary data should have the form: query_id --> (document_score, external_doc_id)
-    data = {}
-
     start = time.time()
     query_times = 0
     n_queries = len(queries)
@@ -254,7 +256,7 @@ def run_retrieval(index, model_name, queries, document_ids, scoring_func, max_ob
             score = scoring_func(index, query_id, document_id, **resource_params)
             query_scores.append((score, ext_doc_id))
 
-        data[query_id] = list(sorted(query_scores, reverse=True))[:max_objects_per_query]
+        rankings[model_name][query_id] = list(sorted(query_scores, reverse=True))[:max_objects_per_query]
 
         query_end_time = time.time()
         query_time = query_end_time - query_start_time
@@ -278,7 +280,7 @@ def run_retrieval(index, model_name, queries, document_ids, scoring_func, max_ob
     with open('{}{}'.format(target_dir, run_out_path), 'w') as f_out:
         write_run(
             model_name=model_name,
-            data=data,
+            data=rankings[model_name],
             out_f=f_out,
             max_objects_per_query=max_objects_per_query)
 
@@ -286,24 +288,6 @@ def run_retrieval(index, model_name, queries, document_ids, scoring_func, max_ob
 
     end = time.time()
     print("Retrieval took {:.2f} seconds.".format(end-start))
-    return data
-
-
-def generate_query_likelihood_model():
-    counter = collections.Counter()
-
-    for query in queries.items():
-        query_id, _ = query
-        query_term_ids = tokenized_queries[query_id]
-
-        for query_term_id in query_term_ids:
-            counter[query_term_id] += 1
-
-    total_elements = len(counter.items())
-    model = {query_term_id : count / total_elements for query_term_id, count in counter.items()}
-    # If a term has never been a part of a query we assign it probability 0 in the query model
-    model = collections.defaultdict(int, model)
-    return model
 
 
 def idf(term_id, id2df, num_documents):
@@ -315,7 +299,7 @@ def tf_idf(term_id, document_term_freq, tuning_parameter=None):
     return log(1 + document_term_freq) * idf(term_id)
 
 
-def bm25(document_id, term_id, document_term_freq, avg_doc_length, tuning_parameter=None):
+def bm25(document_id, term_id, document_term_freq, avg_doc_length, id2df, num_documents):
     """
     :param document_id:
     :param term_id:
@@ -329,10 +313,10 @@ def bm25(document_id, term_id, document_term_freq, avg_doc_length, tuning_parame
     in this assignment can be assumed to be reasonably short.
     """
 
-    def bm25_formula(query_term_id, document_term_freq, l_d, l_average):
+    def bm25_formula(query_term_id, document_term_freq, l_d, l_average, id2df, num_documents):
         enumerator = (k_1 + 1) * document_term_freq
         denominator = k_1 * ((1-b) + b * (l_d/l_average)) + document_term_freq
-        bm25_score = idf(query_term_id)* enumerator/denominator
+        bm25_score = idf(query_term_id, id2df, num_documents) * enumerator/denominator
 
         if bm25_score == 0:
             return 0
@@ -343,7 +327,7 @@ def bm25(document_id, term_id, document_term_freq, avg_doc_length, tuning_parame
     l_average = avg_doc_length
     l_d = index.document_length(document_id)
 
-    return bm25_formula(term_id, document_term_freq, l_d, l_average)
+    return bm25_formula(term_id, document_term_freq, l_d, l_average, id2df, num_documents)
 
 
 def LM_jelinek_mercer_smoothing(int_document_id, query_term_id, document_term_freq, collection_length, tf_C,
@@ -474,6 +458,8 @@ def lsm_reranking(ranked_queries, LSM_model):
 
 
 def create_latent_semantic_model_runfiles():
+    global rankings
+
     # LSI
     start = time.time()
     lsi = LSM('LSI', index)
@@ -487,7 +473,7 @@ def create_latent_semantic_model_runfiles():
     print("LSI similarity index creation took {:.2f} seconds.".format(end - start))
 
     start = time.time()
-    lsi_reranking = lsm_reranking(ranked_queries=ranking['tfidf'], LSM_model=lsi)
+    lsi_reranking = lsm_reranking(ranked_queries=rankings['tfidf'], LSM_model=lsi)
     end = time.time()
     print("LSI reranking took {:.2f} seconds.".format(end - start))
 
@@ -515,7 +501,7 @@ def create_latent_semantic_model_runfiles():
     print("LDA similarity index creation took {:.2f} seconds.".format(end - start))
 
     start = time.time()
-    lda_reranking = lsm_reranking(ranked_queries=ranking['tfidf'], LSM_model=lda)
+    lda_reranking = lsm_reranking(ranked_queries=rankings['tfidf'], LSM_model=lda)
     end = time.time()
     print("LDA reranking took {:.2f} seconds.".format(end - start))
 
@@ -536,7 +522,7 @@ def create_latent_semantic_model_runfiles():
 
 
 def run_retrieval_embeddings_So(index, model_name, queries, document_ids, id2token, vector_collection,
-                             document_representations, combination_func, doc2repr=None):
+                                document_representations, combination_func, doc2repr=None):
     def score_func(index, query_id, document_id, **resource_params):
         id2token = resource_params["id2token"]
         vector_collection = resource_params["vector_collection"]
@@ -554,7 +540,8 @@ def run_retrieval_embeddings_So(index, model_name, queries, document_ids, id2tok
             except KeyError:
                 # OOV word
                 continue
-        if len(query_vectors) == 0: return -1
+        if len(query_vectors) == 0:
+            return -1
 
         query_vector = combination_func(query_vectors)
         try:
@@ -593,12 +580,13 @@ def run_retrieval_embeddings_Savg(index, model_name, queries, document_ids, id2t
             except KeyError:
                 # OOV word
                 continue
-        if len(query_vectors) == 0: return -1
+        if len(query_vectors) == 0:
+            return -1
 
         try:
             lookup_id = document_id if doc2repr is None else doc2repr[document_id]
             document_vector = document_representations[lookup_id]
-        except KeyError as ie:
+        except KeyError:
             # Empty documents, give worst score
             return -1
 
@@ -684,7 +672,7 @@ if __name__ == "__main__":
 
     queries, tokenized_queries, query_terms_inverted, query_term_ids = create_query_resources()
     inverted_index, tf_C, query_word_positions, unique_terms_per_document, avg_doc_length, document_length, \
-           collection_length = build_misc_resources(document_ids)
+        collection_length = build_misc_resources(document_ids)
 
     # create_all_lexical_run_files()
 
