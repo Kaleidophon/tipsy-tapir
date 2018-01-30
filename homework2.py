@@ -2,9 +2,8 @@
 #  Homework 2 Python file
 # -----------------------
 
-# -----------------------
-#  Pre-handed code
-# -----------------------
+# Imports
+
 import sys
 import os
 import io
@@ -131,8 +130,7 @@ ranking = {}
 # Task 1: Implement and compare lexical IR methods
 # ------------------------------------------------
 
-# Processing queries
-
+### Functions provided:
 with open('./ap_88_89/topics_title', 'r') as f_topics:
     queries = parse_topics([f_topics])
 
@@ -154,9 +152,11 @@ query_term_ids = set(
     for query_term_ids in tokenized_queries.values()
     for query_term_id in query_term_ids)
 
+# print(query_term_ids)
+
 print('Gathering statistics about', len(query_term_ids), 'terms.')
 
-# inverted index creation.
+# Inverted Index creation.
 start_time = time.time()
 
 document_lengths = {}
@@ -259,17 +259,16 @@ def query_document_similarity(query_term_ids, document_id):
 def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000, **retrieval_func_params):
     """
     Runs a retrieval method for all the queries and writes the TREC-friendly results in a file.
+
     :param model_name: the name of the model (a string)
     :param score_fn: the scoring function (a function - see below for an example)
-    :param accumulate_score: boolean indicating weather the score for each term should be accumulated or not.
-    If accumulate_score is false, we will use the cosine similarity between document and query instead.
     """
     run_out_path = '{}.run'.format(model_name)
 
-    run_id = 0
-    while os.path.exists(run_out_path):
-        run_id += 1
-        run_out_path = '{}_{}.run'.format(model_name, run_id)
+    if os.path.exists(run_out_path):
+        return
+
+    retrieval_start_time = time.time()
 
     print('Retrieving using', model_name)
 
@@ -278,24 +277,18 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
     # The dictionary data should have the form: query_id --> (document_score, external_doc_id)
     data = {}
 
-    if model_name == "PLM":
-        # Should probably just make this one of the global variables
-        query_word_positions = retrieval_func_params["query_word_positions"]
-        kernel = k_gaussian
-        if "kernel" in retrieval_func_params:
-            kernel = retrieval_func_params["kernel"]
-
-    start = time.time()
+    # XXX: fill the data dictionary.
+    # The dictionary data should have the form: query_id --> (document_score, external_doc_id)
 
     for i, query in enumerate(queries.items()):
-        print("\nScoring query {} out of {} queries".format(i, len(queries)))
+        print("Scoring query {} out of {} queries".format(i, len(queries)))
         query_id, _ = query
         query_term_ids = tokenized_queries[query_id]
 
-        query_scores = []
+        scores = []
 
-        for n, document_id in enumerate(document_ids):
-            ext_doc_id, document_word_positions = index.document(document_id)
+        for document_id in range(index.document_base(), index.maximum_document()):
+            ext_doc_id, _ = index.document(document_id)
             score = 0
             if model_name == "PLM":  # PLMs need the query in it's entirety
                 if n % 100 == 0:
@@ -324,31 +317,9 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
             model_name=model_name,
             data=ranking[model_name],
             out_f=f_out,
-            max_objects_per_query=max_objects_per_query)
+            max_objects_per_query=1000)
 
-    print("Done writing results to run file")
-
-    end = time.time()
-    print("Retrieval took {:.2f} seconds.".format(end-start))
-    return
-
-def generate_query_likelihood_model():
-    counter = collections.Counter()
-
-    for query in queries.items():
-        query_id, _ = query
-        query_term_ids = tokenized_queries[query_id]
-
-        for query_term_id in query_term_ids:
-            counter[query_term_id] += 1
-
-    total_elements = len(counter.items())
-    model = {query_term_id : count / total_elements for query_term_id, count in counter.items()}
-    # If a term has never been a part of a query we assign it probability 0 in the query model
-    model = collections.defaultdict(int, model)
-    return model
-
-def idf(term_id):
+def idf(term_id, num_documents):
     df_t = id2df[term_id]
     return log(num_documents) - log(df_t)
 
@@ -377,18 +348,29 @@ def bm25(document_id, term_id, document_term_freq, tuning_parameter=None):
         if bm25_score == 0:
             return 0
 
-        return log(bm25_score)
+def tfidf(int_document_id, query_term_id, document_term_freq):
+    tf = document_term_freq
+    return log(1 + tf) * idf(query_term_id, num_documents)
 
+def bm25(int_document_id, query_term_id, document_term_freq):
+    l_d = index.document_length(int_document_id)
+    l_avg = avg_doc_length
     k_1 = 1.2
     b = 0.75
-    l_average = avg_doc_length
-    l_d = index.document_length(document_id)
-
-    return bm25_formula(term_id, document_term_freq, l_d, l_average)
-
-def LM_jelinek_mercer_smoothing(int_document_id, query_term_id, document_term_freq, tuning_parameter=0.1):
     tf = document_term_freq
-    lamb = tuning_parameter
+    bm25 = idf(query_term_id, num_documents)*((k_1 + 1) * tf) / (k_1 * ((1-b) + b * (l_d/l_avg)) + tf)
+    return bm25
+
+tf_C = collections.defaultdict(int)
+
+for term_id in query_term_ids:
+    for document_id in range(index.document_base(), index.maximum_document()):
+        tf_C[term_id] += inverted_index[term_id][document_id]
+
+
+def LM_jelinek_mercer_smoothing(int_document_id, query_term_id, document_term_freq):
+    tf = document_term_freq
+    lamb = 0.1
     doc_length = index.document_length(int_document_id)
     C = num_documents
 
@@ -399,9 +381,9 @@ def LM_jelinek_mercer_smoothing(int_document_id, query_term_id, document_term_fr
 
     return prob_q_d
 
-def LM_dirichelt_smoothing(int_document_id, query_term_id, document_term_freq, tuning_parameter=500):
+def LM_dirichelt_smoothing(int_document_id, query_term_id, document_term_freq):
     tf = document_term_freq
-    mu = tuning_parameter
+    mu = 500
     doc_length = index.document_length(int_document_id)
     C = num_documents
 
@@ -628,9 +610,27 @@ def score_by_centroids(query_token_ids, pyndri_index, vector_collection, documen
 # Task 4: Learning to rank (LTR)
 # ------------------------------
 
-
-# --------------------
-# Task 5: Write report
-# --------------------
-
-# Overleaf link: https://www.overleaf.com/13270283sxmcppswgnyd#/51107064/
+# # TODO implement the rest of the retrieval functions
+#
+# # TODO implement tools to help you with the analysis of the results.
+#
+#
+# # # ------------------------------
+# # # Task 2: Latent Semantic Models
+# # # ------------------------------
+# #
+# # # -----------------------------------
+# # # Task 3: Word embeddings for ranking
+# # # -----------------------------------
+# #
+# #
+# # # ------------------------------
+# # # Task 4: Learning to rank (LTR)
+# # # ------------------------------
+# #
+# #
+# # # --------------------
+# # # Task 5: Write report
+# # # --------------------
+# #
+# # # Overleaf link: https://www.overleaf.com/13270283sxmcppswgnyd#/51107064/
