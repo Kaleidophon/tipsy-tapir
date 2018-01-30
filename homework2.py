@@ -383,7 +383,6 @@ def run_retrieval2(index, model_name, queries, document_ids, scoring_func, max_o
     n_queries = len(queries)
 
     for i, query in enumerate(queries.items()):
-        print("Query {} out of {} queries".format(i, n_queries))
         query_start_time = time.time()
         query_id, _ = query
         query_scores = []
@@ -405,10 +404,10 @@ def run_retrieval2(index, model_name, queries, document_ids, scoring_func, max_o
         m, s = divmod(time_left, 60)
         h, m = divmod(m, 60)
         print(
-            "\rThe average query time is {:.2f} seconds, so for the remaining {} querys we estimate that it will take "
-            "{} hour(s), {} minute(s) and {:.2f} seconds".format(
-                average_query_time, querys_left, h, m, s
-            )
+            "\rAverage query time for query {} out of {}: {:.2f} seconds. {} hour(s), {} minute(s) and {:.2f} seconds "
+            "remaining for {} queries.".format(
+                i+1, n_queries, average_query_time, int(h), int(m), s, querys_left
+            ), flush=True, end=""
         )
 
     # Write results
@@ -560,10 +559,16 @@ def run_retrieval_embeddings_So(index, model_name, queries, document_ids, id2tok
         vector_func_query = resource_params.get(
             "vector_func_query", lambda word, collection: collection.word_vectors[word]
         )
-        query_vectors = [
-            vector_func_query(id2token[query_token_id], vector_collection)
-            for query_token_id in query_token_ids if query_term_id != 0
-        ]
+        query_vectors = []
+        for query_token_id in query_token_ids:
+            if query_token_id == 0: continue
+            try:
+                query_vectors.append(vector_func_query(id2token[query_token_id], vector_collection))
+            except KeyError:
+                # OOV word
+                continue
+        if len(query_vectors) == 0: return -1
+
         query_vector = combination_func(query_vectors)
         try:
             lookup_id = document_id if doc2repr is None else doc2repr[document_id]
@@ -593,10 +598,15 @@ def run_retrieval_embeddings_Savg(index, model_name, queries, document_ids, id2t
         vector_func_query = resource_params.get(
             "vector_func_query", lambda word, collection: collection.word_vectors[word]
         )
-        query_vectors = [
-            vector_func_query(id2token[query_token_id], vector_collection)
-            for query_token_id in query_token_ids if query_term_id != 0
-        ]
+        query_vectors = []
+        for query_token_id in query_token_ids:
+            if query_token_id == 0: continue
+            try:
+                query_vectors.append(vector_func_query(id2token[query_token_id], vector_collection))
+            except KeyError:
+                # OOV word
+                continue
+        if len(query_vectors) == 0: return -1
 
         try:
             lookup_id = document_id if doc2repr is None else doc2repr[document_id]
@@ -607,7 +617,7 @@ def run_retrieval_embeddings_Savg(index, model_name, queries, document_ids, id2t
 
         return sum(
             [cosine_similarity(query_vector, document_vector) for query_vector in query_vectors]
-        ) / len(query_token_ids)
+        ) / len(query_vectors)
 
     return run_retrieval2(
         index, model_name, queries, document_ids, score_func,
