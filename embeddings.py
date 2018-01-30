@@ -215,39 +215,6 @@ def calculate_document_representations(pyndri_index, vector_collection, document
     return representations
 
 
-def score_embeddings(query_token_ids, pyndri_index, vector_collection,
-                     vector_func_query=lambda word, collection: collection.word_vectors[word],
-                     vector_func_doc=lambda word, collection: collection.word_vectors[word],
-                     vector_combination_func=lambda vectors: np.sum(vectors), **kwargs):
-    """
-    Score a query and documents by taking the word embeddings of the words they contain and simply sum them,
-    afterwards comparing the summed vectors with cosine similarity.
-    """
-    # Get query vector
-    _, id2token, _ = pyndri_index.get_dictionary()
-    # Just sum
-    query_vectors = [
-        vector_func_query(id2token[query_token_id], vector_collection)
-        for query_token_id in query_token_ids if query_term_id != 0
-    ]
-    query_vector = vector_combination_func(query_vectors)
-
-    # Score documents
-    document_scores = []
-    for document_id in range(pyndri_index.document_base(), pyndri_index.maximum_document()):
-        ext_doc_id, token_ids = pyndri_index.document(document_id)
-
-        document_vectors = [
-            vector_func_doc(id2token[token_id], vector_collection) for token_id in token_ids if token_id != 0
-        ]
-        document_vector = vector_combination_func(document_vectors)
-        score = cosine_similarity(query_vector, document_vector)
-
-        document_scores.append((score, ext_doc_id))
-
-    return document_scores
-
-
 def save_document_representations(reps, path):
     file = h5py.File(path, 'w')
 
@@ -258,39 +225,43 @@ def save_document_representations(reps, path):
     file.close()
 
 
-print("Loading index and such...")
-index = pyndri.Index('index/')
-token2id, id2token, id2df = index.get_dictionary()
-num_documents = index.maximum_document() - index.document_base()
-term_frequencies = Counter()
-
-dictionary = pyndri.extract_dictionary(index)
-document_ids = list(range(index.document_base(), index.maximum_document()))
-
-with open('./ap_88_89/topics_title', 'r') as f_topics:
-    queries = parse_topics([f_topics])
-
-tokenized_queries = {
-    query_id: [dictionary.translate_token(token)
-               for token in index.tokenize(query_string)
-               if dictionary.has_token(token)]
-    for query_id, query_string in queries.items()}
-
-query_term_ids = set(
-    query_term_id
-    for query_term_ids in tokenized_queries.values()
-    for query_term_id in query_term_ids)
-
-print('Gathering statistics about', len(query_term_ids), 'terms.')
-
-for int_doc_id in document_ids:
-    ext_doc_id, doc_token_ids = index.document(int_doc_id)
-    term_frequencies += Counter([token_id for token_id in doc_token_ids if token_id in query_term_ids])
+def load_document_representations(path):
+    return h5py.File(path, "r")
 
 
-print("Reading word embeddings...")
+# print("Loading index and such...")
+# index = pyndri.Index('index/')
+# token2id, id2token, id2df = index.get_dictionary()
+# num_documents = index.maximum_document() - index.document_base()
+# term_frequencies = Counter()
+#
+# dictionary = pyndri.extract_dictionary(index)
+# document_ids = list(range(index.document_base(), index.maximum_document()))
+#
+# with open('./ap_88_89/topics_title', 'r') as f_topics:
+#     queries = parse_topics([f_topics])
+#
+# tokenized_queries = {
+#     query_id: [dictionary.translate_token(token)
+#                for token in index.tokenize(query_string)
+#                if dictionary.has_token(token)]
+#     for query_id, query_string in queries.items()}
+#
+# query_term_ids = set(
+#     query_term_id
+#     for query_term_ids in tokenized_queries.values()
+#     for query_term_id in query_term_ids)
+#
+# print('Gathering statistics about', len(query_term_ids), 'terms.')
+#
+# for int_doc_id in document_ids:
+#     ext_doc_id, doc_token_ids = index.document(int_doc_id)
+#     term_frequencies += Counter([token_id for token_id in doc_token_ids if token_id in query_term_ids])
 
-vectors = VectorCollection.load_vectors("./w2v_60")
+
+# print("Reading word embeddings...")
+#
+# vectors = VectorCollection.load_vectors("./w2v_60")
 # different representations:
 # 1. Coordinate-wise min
 # 2. Coordinate-wise max
@@ -330,13 +301,13 @@ vectors = VectorCollection.load_vectors("./w2v_60")
 # save_document_representations(precomputed_document_representations_wout_1_4, "./wout_representations_1_4.pkl")
 # del precomputed_document_representations_wout_1_4
 
-# 5. - 7.
-print("Precomputing vector document representations 5. - 7. with W_out vectors...")
-precomputed_document_representations_wout_5_7 = calculate_document_representations(
-    index, vectors, document_ids, doc_kmeans, doc_tfidf_scaling, doc_kmeans_tfidf, # doc_circular_conv,
-    vector_func=lambda word, collection: collection.context_vectors[word],
-    document_term_freqs=term_frequencies, id2df=id2df, number_of_documents=num_documents
-)
-save_document_representations(precomputed_document_representations_wout_5_7, "./wout_representations_5_7")
-del precomputed_document_representations_wout_5_7
+# # 5. - 7.
+# print("Precomputing vector document representations 5. - 7. with W_out vectors...")
+# precomputed_document_representations_wout_5_7 = calculate_document_representations(
+#     index, vectors, document_ids, doc_kmeans, doc_tfidf_scaling, doc_kmeans_tfidf, # doc_circular_conv,
+#     vector_func=lambda word, collection: collection.context_vectors[word],
+#     document_term_freqs=term_frequencies, id2df=id2df, number_of_documents=num_documents
+# )
+# save_document_representations(precomputed_document_representations_wout_5_7, "./wout_representations_5_7")
+# del precomputed_document_representations_wout_5_7
 
