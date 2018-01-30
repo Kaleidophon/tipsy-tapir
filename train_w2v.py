@@ -3,7 +3,6 @@ import gensim
 import logging
 import pyndri
 import pyndri.compat
-from gensim.models import Word2Vec
 import numpy as np
 import matplotlib.pyplot as plt
 import time
@@ -52,28 +51,6 @@ def train_word_embeddings(sentences, epochs, epsilon=None, save_path=None, **mod
 
 def save_word2vec_model(model, path):
     model.save(path)
-
-
-def load_word2vec_model(path, to_train=False):
-    model = Word2Vec.load(path)
-
-    if to_train:
-        return model
-
-    # In case it doesn't need to be trained, delete train code to free up ram
-    word_vectors = model.wv
-
-    # TODO: Test this code
-    context_vectors = dict()
-    if hasattr(model, "syn1"):
-        # For hierarchical softmax
-        context_vectors = model.syn1
-    elif hasattr(model, "syn1neg"):
-        # For negative sampling
-        context_vectors = model.syn1neg
-
-    del model
-    return word_vectors, context_vectors
 
 
 def build_sentences(pyndri_index):
