@@ -136,6 +136,14 @@ tokenized_queries = {
                if dictionary.has_token(token)]
     for query_id, query_string in queries.items()}
 
+# Record in which query specific query terms are occurring (inverted index)
+query_terms_inverted = collections.defaultdict(set)
+for query_id, query_term_ids in tokenized_queries.items():
+    for query_term_id in query_term_ids:
+        # A lookup-table for what queries this term appears in
+        query_terms_inverted[query_term_id].add(int(query_id))
+
+
 query_term_ids = set(
     query_term_id
     for query_term_ids in tokenized_queries.values()
@@ -186,8 +194,8 @@ print('Inverted index creation took', time.time() - start_time, 'seconds.')
 print("Creating tf_c, query_word_positions and num_unique_words")
 tf_C = collections.Counter()
 num_unique_words = collections.defaultdict(int)
-# Query term id + document id -> Position of that term within the doc
-query_word_positions = collections.defaultdict(list)
+# Document id + Query id -> Positions of terms occurring in that query inside the document
+query_word_positions = collections.defaultdict(lambda: collections.defaultdict(list))
 # tf_C = collections.defaultdict(lambda: 1)
 
 print("Number of query term ids: ", len(query_term_ids))
@@ -197,8 +205,9 @@ for document_id in document_ids:
     num_unique_words[document_id] = len(document_words)
 
     for pos, id_at_pos in enumerate(positions):
-        if pos in query_term_ids:
-            query_word_positions[document_id].append(pos)
+        if id_at_pos in query_term_ids:
+            for query_id in query_terms_inverted[id_at_pos]:
+                query_word_positions[document_id][int(query_id)].append(pos)
 
     for term_id in query_term_ids:
         #term = inverted_index[term_id][document_id]
@@ -272,8 +281,13 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
 
     start = time.time()
 
+
+    query_times = 0
+
     for i, query in enumerate(queries.items()):
-        print("\nScoring query {} out of {} queries".format(i, len(queries)))
+        print("Query {} out of {} queries".format(i, len(queries)))
+        query_start_time = time.time()
+
         query_id, _ = query
         query_term_ids = tokenized_queries[query_id]
 
@@ -281,21 +295,23 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
 
         for n, document_id in enumerate(document_ids):
             ext_doc_id, document_word_positions = index.document(document_id)
+
+
             score = 0
             # TODO: Add embedding scoring
             if model_name == "PLM":  # PLMs need the query in it's entirety
-                if n % 100 == 0:
-                    print("\rScoring document {} out of {} documents ({:.2f} %)".format(
-                            document_id, index.maximum_document(), document_id / index.maximum_document() * 100
-                        ), flush=True, end=""
-                    )
+                # if n % 100 == 0:
+                    # print("\rScoring document {} out of {} documents ({:.2f} %)".format(
+                    #         document_id, index.maximum_document(), document_id / index.maximum_document() * 100
+                    #     ), flush=True, end=""
+                    # )
                 document_length = index.document_length(document_id)
                 plm = PLM(
-                    query_term_ids, document_length, query_word_positions[document_id], background_model=None,
-                    kernel=kernel
+                    query_term_ids, document_length, query_word_positions[document_id][int(query_id)],
+                    background_model=None, kernel=kernel
                 )
                 score = plm.best_position_strategy_score()
-                #print("Score: ", score)
+                # print("Score: ", score)
 
             else:
                 for query_term_id in query_term_ids:
@@ -304,8 +320,17 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
                             tuning_parameter=retrieval_func_params["tuning_parameter"])
 
             query_scores.append((score, ext_doc_id))
+            # if score != 0: print(score)
 
         data[query_id] = list(sorted(query_scores, reverse=True))[:max_objects_per_query]
+
+        query_end_time = time.time()
+        query_time = query_end_time - query_start_time
+        query_times += query_time
+        average_query_time = query_times / max(i, 1)
+        querys_left = len(queries) - i
+        print("\rThe average query time is {} seconds, so for the remaining {} querys we estimate that it will take {} seconds"\
+                .format(average_query_time, querys_left, average_query_time * querys_left))
 
     with open('./lexical_results/{}'.format(run_out_path), 'w') as f_out:
         write_run(
@@ -426,21 +451,22 @@ def create_all_run_files():
     j_m__lambda_values = [0.1, 0.3, 0.5, 0.7, 0.9]
     for val in j_m__lambda_values:
         print("Running LM_jelinek", val)
-        run_retrieval('jelinek_mercer_{}'.format(val), LM_jelinek_mercer_smoothing, document_ids, tuning_parameter=val)
+        run_retrieval('jelinek_mercer_{}'.format(str(val).replace(".", "_")), LM_jelinek_mercer_smoothing, document_ids, tuning_parameter=val)
 
     dirichlet_values = [500, 1000, 1500]
     for val in dirichlet_values:
         print("Dunning Dirichlet", val)
-        run_retrieval('dirichlet_mu_{}'.format(val), LM_dirichelt_smoothing, document_ids, tuning_parameter=val)
+        run_retrieval('dirichlet_mu_{}'.format(str(val).replace(".", "_")), LM_dirichelt_smoothing, document_ids, tuning_parameter=val)
 
     absolute_discounting_values = j_m__lambda_values
     for val in absolute_discounting_values:
         print("Running ABS_discount", val)
-        run_retrieval('abs_disc_delta_{}'.format(val), absolute_discounting, document_ids, tuning_parameter=val)
+        run_retrieval('abs_disc_delta_{}'.format(str(val).replace(".", "_")), absolute_discounting, document_ids, tuning_parameter=val)
 
     # TODO PLM when it is ready
 
-#create_all_run_files()
+# create_all_run_files()
+run_retrieval('PLM', None, document_ids=document_ids, query_word_positions=query_word_positions)
 
 # TODO implement tools to help you with the analysis of the results.
 
