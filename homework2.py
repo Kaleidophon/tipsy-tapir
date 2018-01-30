@@ -385,7 +385,7 @@ def absolute_discounting(document_id, term_id, document_term_freq, tuning_parame
     return np.log(max(document_term_freq - discount, 0) / d + ((discount * number_of_unique_terms) / d) * (tf_C[term_id] / C))
 
 def create_all_lexical_run_files():
-    print("##### Creating all run files! #####")
+    print("##### Creating all lexical run files! #####")
 
     start = time.time()
     print("Running TFIDF")
@@ -448,7 +448,7 @@ def create_all_lexical_run_files():
     end = time.time()
     print("Retrieval took {:.2f} seconds.".format(end-start))
 
-# create_all_run_files()
+create_all_lexical_run_files()
 
 # TODO implement tools to help you with the analysis of the results.
 
@@ -535,11 +535,11 @@ with open('./lexical_results/{}'.format(run_out_path), 'w') as f_out:
 end = time.time()
 print("LDA run file creation {:.2f} seconds.".format(end-start))
 
------------------------------------
-Task 3: Word embeddings for ranking
------------------------------------
+# -----------------------------------
+# Task 3: Word embeddings for ranking
+# -----------------------------------
 
-TODO: Load model and stuff
+# TODO: Load model and stuff
 
 class VectorCollection:
 

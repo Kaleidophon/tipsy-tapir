@@ -18,38 +18,28 @@ run_dirichlet () {
   $relative_trec_eval_path -m all_trec -q ap_88_89/qrel_test ./lexical_results/"$1"_1500.run | grep "\sall\s" > ./lexical_results/"$1"_results_1500.txt
 }
 
-# Run tfidf evaulation
-filename="tfidf"
-run_single_evaluation $filename
+# Run tfidf evaluation
+run_single_evaluation "tfidf"
 
 # BM25
-filename="BM25"
-run_single_evaluation $filename
+run_single_evaluation "BM25"
 
 # Jelinek-Mercer
-filename="jelinek_mercer"
-run_parameters_between_1 $filename
+run_parameters_between_1 "jelinek_mercer"
 
 # Dirichlet
-filename="dirichlet_mu"
-run_dirichlet $filename
+run_dirichlet "dirichlet_mu"
 
 # Absolute discounting
-filename="abs_disc_delta"
-run_parameters_between_1 $filename
+run_parameters_between_1 "abs_disc_delta"
 
 # PLM
-filename="PLM_passage"
-run_single_evaluation $filename
+run_single_evaluation "PLM_passage"
 
-filename="PLM_gaussian"
-run_single_evaluation $filename
+run_single_evaluation "PLM_gaussian"
 
-filename="PLM_triangle"
-run_single_evaluation $filename
+run_single_evaluation "PLM_triangle"
 
-filename="PLM_cosine"
-run_single_evaluation $filename
+run_single_evaluation "PLM_cosine"
 
-filename="PLM_circle"
-run_single_evaluation $filename
+run_single_evaluation "PLM_circle"
