@@ -405,8 +405,8 @@ def run_retrieval2(index, model_name, queries, document_ids, scoring_func, max_o
         m, s = divmod(time_left, 60)
         h, m = divmod(m, 60)
         print(
-            "\rThe average query time is {} seconds, so for the remaining {} querys we estimate that it will take {} "
-            "hour(s), {} minute(s) and {:.2f} seconds".format(
+            "\rThe average query time is {:.2f} seconds, so for the remaining {} querys we estimate that it will take "
+            "{} hour(s), {} minute(s) and {:.2f} seconds".format(
                 average_query_time, querys_left, h, m, s
             )
         )
@@ -550,12 +550,13 @@ def create_all_run_files():
 
 
 def run_retrieval_embeddings_So(index, model_name, queries, document_ids, id2token, vector_collection,
-                             document_representations, combination_func):
+                             document_representations, combination_func, doc2repr=None):
     def score_func(index, query_id, document_id, **resource_params):
         id2token = resource_params["id2token"]
         vector_collection = resource_params["vector_collection"]
         tokenized_queries = resource_params["tokenized_queries"]
         query_token_ids = tokenized_queries[query_id]
+        doc2repr = resource_params.get("doc2repr", None)
         vector_func_query = resource_params.get(
             "vector_func_query", lambda word, collection: collection.word_vectors[word]
         )
@@ -564,7 +565,12 @@ def run_retrieval_embeddings_So(index, model_name, queries, document_ids, id2tok
             for query_token_id in query_token_ids if query_term_id != 0
         ]
         query_vector = combination_func(query_vectors)
-        document_vector = document_representations[document_id]
+        try:
+            lookup_id = document_id if doc2repr is None else doc2repr[document_id]
+            document_vector = document_representations[lookup_id]
+        except KeyError as ie:
+            # Empty documents, give worst score
+            return -1
 
         return cosine_similarity(query_vector, document_vector)
 
@@ -572,16 +578,17 @@ def run_retrieval_embeddings_So(index, model_name, queries, document_ids, id2tok
         index, model_name, queries, document_ids, score_func,
         # Named key word arguments to build as resources before scoring
         id2_token=id2token, vector_collection=vector_collection, document_representations=document_representations,
-        combination_func=combination_func
+        combination_func=combination_func, doc2repr=doc2repr
     )
 
 
 def run_retrieval_embeddings_Savg(index, model_name, queries, document_ids, id2token, vector_collection,
-                             document_representations, tokenized_queries):
+                             document_representations, tokenized_queries, doc2repr=None):
     def score_func(index, query_id, document_id, **resource_params):
         id2token = resource_params["id2token"]
         vector_collection = resource_params["vector_collection"]
         tokenized_queries = resource_params["tokenized_queries"]
+        doc2repr = resource_params.get("doc2repr", None)
         query_token_ids = tokenized_queries[query_id]
         vector_func_query = resource_params.get(
             "vector_func_query", lambda word, collection: collection.word_vectors[word]
@@ -590,9 +597,12 @@ def run_retrieval_embeddings_Savg(index, model_name, queries, document_ids, id2t
             vector_func_query(id2token[query_token_id], vector_collection)
             for query_token_id in query_token_ids if query_term_id != 0
         ]
+
         try:
-            document_vector = document_representations[document_id-1]
-        except:
+            lookup_id = document_id if doc2repr is None else doc2repr[document_id]
+            document_vector = document_representations[lookup_id]
+        except KeyError as ie:
+            # Empty documents, give worst score
             return -1
 
         return sum(
@@ -603,7 +613,7 @@ def run_retrieval_embeddings_Savg(index, model_name, queries, document_ids, id2t
         index, model_name, queries, document_ids, score_func,
         # Named key word arguments to build as resources before scoring
         id2token=id2token, vector_collection=vector_collection, document_representations=document_representations,
-        tokenized_queries=tokenized_queries
+        tokenized_queries=tokenized_queries, doc2repr=doc2repr
     )
 
 
@@ -628,14 +638,37 @@ def run_retrieval_plm(index, model_name, queries, document_ids, query_word_posit
     )
 
 
+def create_document_id_to_repr_map(document_ids):
+    """
+    Compensate for empty documents in document collections.
+    Because of using hd5 storage, we can only store vectors of the same length, so no zero-length vectors for empty
+    documents. Because they were disregarded during the strorage procedure, the alignment between document ids and
+    indices of the list with their vector representations is now off and has to be fixed.
+
+    It's a little dirty and hack-y, but was the best solution given the time constraint.
+    """
+    empty_ids = {93688, 102435, 104040, 121863, 121866, 122113, 147904, 149905, 153512, 154467, 155654}
+    doc2repr = dict()
+
+    zone = 1
+    for i in range(1, len(document_ids)+1):
+        if i in empty_ids:
+            zone += 1
+            continue
+
+        doc2repr[i] = i - zone
+
+    return doc2repr
+
 #run_retrieval_plm("PLM", index, queries, document_ids, query_word_positions, background_model=None)
 from embeddings import doc_centroid, VectorCollection, load_document_representations
 vectors = VectorCollection.load_vectors("./w2v_60")
-doc_representations = load_document_representations("./win_representations_1_4.pkl")
-d = doc_representations.get("doc_centroid")
+doc2repr = create_document_id_to_repr_map(document_ids)
+doc_representations = load_document_representations("./win_representations_1_4")
 run_retrieval_embeddings_Savg(
     index, "embeddings_Savg", queries, document_ids, id2token=id2token, vector_collection=vectors,
-    document_representations=doc_representations.get("doc_centroid"), tokenized_queries=tokenized_queries
+    document_representations=doc_representations.get("doc_centroid"), tokenized_queries=tokenized_queries,
+    doc2repr=doc2repr
 )
 
 
