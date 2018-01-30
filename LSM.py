@@ -11,6 +11,9 @@ from gensim.similarities import Similarity
 
 import os
 
+if not os.path.exists('./LSM/'):
+    os.makedirs('./LSM/')
+
 # File Locations
 dict_file = './LSM/dictionary.dict'
 mm_corpus_file = './LSM/corpus.mm'
