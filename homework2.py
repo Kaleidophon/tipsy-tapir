@@ -265,7 +265,7 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
     for i, query in enumerate(queries.items()):
 
         print("Scoring query {} out of {} queries".format(i, len(queries)))
-        
+
         query_start_time = time.time()
 
         query_id, _ = query
@@ -275,7 +275,7 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
 
         for n, document_id in enumerate(document_ids):
             ext_doc_id, document_word_positions = index.document(document_id)
-            
+
             score = 0
             # TODO: Add embedding scoring
             if model_name == "PLM":  # PLMs need the query in it's entirety
@@ -297,7 +297,7 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
                     score += score_fn(document_id, query_term_id, document_term_frequency, \
                             tuning_parameter=retrieval_func_params["tuning_parameter"])
             ranking[model_name][query_id].append((score, ext_doc_id))
-            
+
         ranking[model_name][query_id] = list(sorted(ranking[model_name][query_id], reverse=True))[:max_objects_per_query]
 
         query_end_time = time.time()
@@ -315,15 +315,12 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
             out_f=f_out,
             max_objects_per_query=1000)
 
-
 def idf(term_id):
     df_t = id2df[term_id]
     return log(num_documents) - log(df_t)
 
-
 def tf_idf(_, term_id, document_term_freq, tuning_parameter=None):
     return log(1 + document_term_freq) * idf(term_id)
-
 
 def bm25(document_id, term_id, document_term_freq, tuning_parameter=None):
     """
@@ -346,7 +343,6 @@ def bm25(document_id, term_id, document_term_freq, tuning_parameter=None):
 
         if bm25_score == 0:
             return 0
-        # TODO(Santhosh): why log ?
         return bm25_score
 
     k_1 = 1.2
@@ -356,12 +352,10 @@ def bm25(document_id, term_id, document_term_freq, tuning_parameter=None):
 
     return bm25_formula(term_id, document_term_freq, l_d, l_average)
 
-
 def LM_jelinek_mercer_smoothing(int_document_id, query_term_id, document_term_freq, tuning_parameter=0.1):
     tf = document_term_freq
     lamb = tuning_parameter
     doc_length = index.document_length(int_document_id)
-    # TODO(Santhosh) : confirm what C is
     C = collection_length
 
     try:
@@ -369,33 +363,26 @@ def LM_jelinek_mercer_smoothing(int_document_id, query_term_id, document_term_fr
     except ZeroDivisionError as err:
         prob_q_d = 0
 
-    # TODO(Santhosh): take log of the final result ?
-    return prob_q_d
-
+    return np.log(prob_q_d)
 
 def LM_dirichelt_smoothing(int_document_id, query_term_id, document_term_freq, tuning_parameter=500):
     tf = document_term_freq
     mu = tuning_parameter
     doc_length = index.document_length(int_document_id)
-    # TODO(Santhosh) : confirm what C is
     C = collection_length
 
     prob_q_d = (tf + mu * (tf_C[query_term_id] / C)) / (doc_length + mu)
 
-    # TODO(Santhosh): take log of the final result ?
-    return prob_q_d
-
+    return np.log(prob_q_d)
 
 def absolute_discounting(document_id, term_id, document_term_freq, tuning_parameter=0.1):
     discount = tuning_parameter
     d = index.document_length(document_id)
-    # TODO(Santhosh) : confirm what C is
     C = collection_length
     if d == 0: return 0
     number_of_unique_terms = num_unique_words[document_id]
 
-    # TODO(Santhosh): take log of the final result ?
-    return max(document_term_freq - discount, 0) / d + ((discount * number_of_unique_terms) / d) * (tf_C[term_id] / C)
+    return np.log(max(document_term_freq - discount, 0) / d + ((discount * number_of_unique_terms) / d) * (tf_C[term_id] / C))
 
 def create_all_run_files():
     print("##### Creating all run files! #####")
@@ -423,7 +410,7 @@ def create_all_run_files():
     dirichlet_values = [500, 1000, 1500]
     for val in dirichlet_values:
         start = time.time()
-        print("Dunning Dirichlet", val)
+        print("Running Dirichlet", val)
         run_retrieval('dirichlet_mu_{}'.format(str(val).replace(".", "_")), LM_dirichelt_smoothing, document_ids, tuning_parameter=val)
         end = time.time()
         print("Retrieval took {:.2f} seconds.".format(end-start))
@@ -526,11 +513,11 @@ with open('./lexical_results/{}'.format(run_out_path), 'w') as f_out:
 end = time.time()
 print("LDA run file creation {:.2f} seconds.".format(end-start))
 
-# -----------------------------------
-# Task 3: Word embeddings for ranking
-# -----------------------------------
+-----------------------------------
+Task 3: Word embeddings for ranking
+-----------------------------------
 
-# TODO: Load model and stuff
+TODO: Load model and stuff
 
 class VectorCollection:
 
@@ -627,12 +614,12 @@ def score_by_centroids(query_token_ids, pyndri_index, vector_collection, documen
 # Task 4: Learning to rank (LTR)
 # ------------------------------
 
-# # TODO implement the rest of the retrieval functions
-#
-# # TODO implement tools to help you with the analysis of the results.
+# TODO implement the rest of the retrieval functions
 
-# # # --------------------
-# # # Task 5: Write report
-# # # --------------------
-# #
-# # # Overleaf link: https://www.overleaf.com/13270283sxmcppswgnyd#/51107064/
+# TODO implement tools to help you with the analysis of the results.
+
+# --------------------
+# Task 5: Write report
+# --------------------
+
+# Overleaf link: https://www.overleaf.com/13270283sxmcppswgnyd#/51107064/
