@@ -104,12 +104,18 @@ def doc_kmeans(vectors, k=None, cache=None, **kwargs):
     return doc_centroid(filtered_vectors), cache
 
 
-def doc_tfidf_scaling(vectors, token_ids, document_term_freqs, id2df, number_of_documents, cache=None, **kwargs):
+def doc_tfidf_scaling(vectors, token_ids, document_term_freqs, id2df, number_of_documents, cache=dict(), **kwargs):
     if len(vectors) == 0:
         return np.array([])
 
     for i, (vector, token_id) in enumerate(zip(vectors, token_ids)):
-        term_tf_idf = tf_idf(token_id, document_term_freqs, id2df, number_of_documents)
+        if hasattr(cache, "tfidf"):
+            tf_idf_values = cache["tfidf"]
+        else:
+            tf_idf_values = cache["tfidf"] = dict()
+
+        term_tf_idf = tf_idf_values.get(token_id, tf_idf(token_id, document_term_freqs, id2df, number_of_documents))
+        cache["tfidf"][term_tf_idf] = term_tf_idf
         vectors[i] = vector * term_tf_idf
 
     return doc_centroid(vectors), cache
@@ -138,7 +144,11 @@ def doc_circular_conv(vectors, cache=None, **kwargs):
 def doc_kmeans_tfidf(vectors, token_ids, document_term_freqs, id2df, number_of_documents, k=None, cache=dict(), **kwargs):
     # Fetch filtered vectors produced by doc_kmeans to save computational cost
     filtered_vectors = cache.get("kmeans_filtered", _doc_kmeans(vectors, k))
-    return doc_tfidf_scaling(filtered_vectors, token_ids, document_term_freqs, id2df, number_of_documents, cache=cache)
+    res = doc_tfidf_scaling(filtered_vectors, token_ids, document_term_freqs, id2df, number_of_documents, cache=cache)
+    # Reset tf-idf part of cache as value depends on document
+    if hasattr(cache, "tfidf"):
+        cache["tfidf"] = dict()
+    return res
 
 
 class VectorCollection:
@@ -300,14 +310,14 @@ vectors = VectorCollection.load_vectors("./w2v_60")
 # save_document_representations(precomputed_document_representations_win_1_4, "./win_representations_1_4")
 # del precomputed_document_representations_win_1_4
 
-# 5. - 8.
-print("Precomputing vector document representations 5. - 7. with W_in vectors...")
-precomputed_document_representations_win_5_7 = calculate_document_representations(
-    index, vectors, document_ids, doc_kmeans, doc_tfidf_scaling, doc_kmeans_tfidf, #doc_circular_conv,
-    document_term_freqs=term_frequencies, id2df=id2df, number_of_documents=num_documents
-)
-save_document_representations(precomputed_document_representations_win_5_7, "./win_representations_5_7")
-del precomputed_document_representations_win_5_7
+# # 5. - 8.
+# print("Precomputing vector document representations 5. - 7. with W_in vectors...")
+# precomputed_document_representations_win_5_7 = calculate_document_representations(
+#     index, vectors, document_ids, doc_kmeans, doc_tfidf_scaling, doc_kmeans_tfidf, #doc_circular_conv,
+#     document_term_freqs=term_frequencies, id2df=id2df, number_of_documents=num_documents
+# )
+# save_document_representations(precomputed_document_representations_win_5_7, "./win_representations_5_7")
+# del precomputed_document_representations_win_5_7
 
 
 ## W_out representations
@@ -320,7 +330,7 @@ del precomputed_document_representations_win_5_7
 # save_document_representations(precomputed_document_representations_wout_1_4, "./wout_representations_1_4.pkl")
 # del precomputed_document_representations_wout_1_4
 
-# 5. - 8.
+# 5. - 7.
 print("Precomputing vector document representations 5. - 7. with W_out vectors...")
 precomputed_document_representations_wout_5_7 = calculate_document_representations(
     index, vectors, document_ids, doc_kmeans, doc_tfidf_scaling, doc_kmeans_tfidf, # doc_circular_conv,
