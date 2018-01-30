@@ -20,6 +20,8 @@ from math import log
 
 import numpy as np
 
+from scipy.stats import ttest_rel
+
 from PLM import PLM
 from kernels import k_gaussian
 from LSM import LSM
@@ -220,7 +222,7 @@ for document_id in document_ids:
 
 print("Done creating tf_c, query_word_positions and num_unique_words")
 
-# TODO: not used ! To remove ?
+# TODO(Santhosh): not used ! To remove ?
 def cosine_similarity(a, b):
     """Takes 2 vectors a, b and returns the cosine similarity according
     to the definition of the dot product
@@ -236,7 +238,7 @@ def cosine_similarity(a, b):
 
     return res
 
-# TODO: not used ! To remove ?
+# TODO(Santhosh): not used ! To remove ?
 def query_document_similarity(query_term_ids, document_id):
     """
     Calculates the scores for both the query and the document given by the query_term_ids
@@ -319,9 +321,26 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
             out_f=f_out,
             max_objects_per_query=1000)
 
-def idf(term_id, num_documents):
+# TODO(Santhosh): not used ! To remove ?
+def generate_query_likelihood_model():
+    counter = collections.Counter()
+
+    for query in queries.items():
+        query_id, _ = query
+        query_term_ids = tokenized_queries[query_id]
+
+        for query_term_id in query_term_ids:
+            counter[query_term_id] += 1
+
+    total_elements = len(counter.items())
+    model = {query_term_id : count / total_elements for query_term_id, count in counter.items()}
+    # If a term has never been a part of a query we assign it probability 0 in the query model
+    model = collections.defaultdict(int, model)
+    return model
+
+def idf(term_id):
     df_t = id2df[term_id]
-    return log(num_documents) - log(df_t)
+    return log(total_number_of_documents) - log(df_t)
 
 def tf_idf(_, term_id, document_term_freq, tuning_parameter=None):
     return log(1 + document_term_freq) * idf(term_id)
@@ -347,31 +366,30 @@ def bm25(document_id, term_id, document_term_freq, tuning_parameter=None):
 
         if bm25_score == 0:
             return 0
+        # TODO(Santhosh): why log ?
+        return log(bm25_score)
 
-def tfidf(int_document_id, query_term_id, document_term_freq):
-    tf = document_term_freq
-    return log(1 + tf) * idf(query_term_id, num_documents)
-
-def bm25(int_document_id, query_term_id, document_term_freq):
-    l_d = index.document_length(int_document_id)
-    l_avg = avg_doc_length
     k_1 = 1.2
     b = 0.75
+    l_average = avg_doc_length
+    l_d = index.document_length(document_id)
+
+    return bm25_formula(term_id, document_term_freq, l_d, l_average)
+
+term_doc_prob = doc['terms'].get(token_id, 0) / doc['length']
+term_col_prob = id2colfreq[token_id] / collection_length
+jelinek_mercer(term_doc_prob, term_col_prob, lmbda)
+collection_model = lmbda * term_col_prob
+
+# Smoothed seen probabililty.
+seen_prob = ((1.-lmbda) * term_doc_prob) + collection_model
+np.log(seen_prob)
+
+def LM_jelinek_mercer_smoothing(int_document_id, query_term_id, document_term_freq, tuning_parameter=0.1):
     tf = document_term_freq
-    bm25 = idf(query_term_id, num_documents)*((k_1 + 1) * tf) / (k_1 * ((1-b) + b * (l_d/l_avg)) + tf)
-    return bm25
-
-tf_C = collections.defaultdict(int)
-
-for term_id in query_term_ids:
-    for document_id in range(index.document_base(), index.maximum_document()):
-        tf_C[term_id] += inverted_index[term_id][document_id]
-
-
-def LM_jelinek_mercer_smoothing(int_document_id, query_term_id, document_term_freq):
-    tf = document_term_freq
-    lamb = 0.1
+    lamb = tuning_parameter
     doc_length = index.document_length(int_document_id)
+    # TODO(Santhosh) : confirm what C is
     C = num_documents
 
     try:
@@ -379,46 +397,53 @@ def LM_jelinek_mercer_smoothing(int_document_id, query_term_id, document_term_fr
     except ZeroDivisionError as err:
         prob_q_d = 0
 
+    # TODO(Santhosh): take log of the final result ?
     return prob_q_d
 
-def LM_dirichelt_smoothing(int_document_id, query_term_id, document_term_freq):
+def LM_dirichelt_smoothing(int_document_id, query_term_id, document_term_freq, tuning_parameter=500):
     tf = document_term_freq
-    mu = 500
+    mu = tuning_parameter
     doc_length = index.document_length(int_document_id)
+    # TODO(Santhosh) : confirm what C is
     C = num_documents
 
     prob_q_d = (tf + mu * (tf_C[query_term_id] / C)) / (doc_length + mu)
 
+    # TODO(Santhosh): take log of the final result ?
     return prob_q_d
 
 def absolute_discounting(document_id, term_id, document_term_freq, tuning_parameter=0.1):
     discount = tuning_parameter
     d = index.document_length(document_id)
+    # TODO(Santhosh) : confirm what C is
+    C = num_documents
     if d == 0: return 0
     number_of_unique_terms = num_unique_words[document_id]
-    return max(document_term_freq - discount, 0) / d + ((discount * number_of_unique_terms) / d) * (tf_C[term_id] / num_documents)
+
+    # TODO(Santhosh): take log of the final result ?
+    return max(document_term_freq - discount, 0) / d + ((discount * number_of_unique_terms) / d) * (tf_C[term_id] / C)
 
 def create_all_run_files():
     print("##### Creating all run files! #####")
 
     run_retrieval('tfidf', tf_idf, document_ids, tuning_parameter=None)
 
-    # run_retrieval('BM25', bm25, document_ids, tuning_parameter=None)
+    run_retrieval('BM25', bm25, document_ids, tuning_parameter=None)
 
-    # j_m__lambda_values = [0.1, 0.3, 0.5, 0.7, 0.9]
-    # for val in j_m__lambda_values:
-    #     print("Running LM_jelinek", val)
-    #     run_retrieval('jelinek_mercer_{}'.format(val), LM_jelinek_mercer_smoothing, document_ids, tuning_parameter=val)
-    #
-    # dirichlet_values = [500, 1000, 1500]
-    # for val in dirichlet_values:
-    #     print("Dunning Dirichlet", val)
-    #     run_retrieval('dirichlet_mu_{}'.format(val), LM_dirichelt_smoothing, document_ids, tuning_parameter=val)
-    #
-    # absolute_discounting_values = j_m__lambda_values
-    # for val in absolute_discounting_values:
-    #     print("Running ABS_discount", val)
-    #     run_retrieval('abs_disc_delta_{}'.format(val), absolute_discounting, document_ids, tuning_parameter=val)
+    j_m__lambda_values = [0.1, 0.3, 0.5, 0.7, 0.9]
+    for val in j_m__lambda_values:
+        print("Running LM_jelinek", val)
+        run_retrieval('jelinek_mercer_{}'.format(val), LM_jelinek_mercer_smoothing, document_ids, tuning_parameter=val)
+
+    dirichlet_values = [500, 1000, 1500]
+    for val in dirichlet_values:
+        print("Dunning Dirichlet", val)
+        run_retrieval('dirichlet_mu_{}'.format(val), LM_dirichelt_smoothing, document_ids, tuning_parameter=val)
+
+    absolute_discounting_values = j_m__lambda_values
+    for val in absolute_discounting_values:
+        print("Running ABS_discount", val)
+        run_retrieval('abs_disc_delta_{}'.format(val), absolute_discounting, document_ids, tuning_parameter=val)
 
     # TODO: PLM when it is ready
 
