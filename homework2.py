@@ -2,29 +2,29 @@
 #  Homework 2 Python file
 # -----------------------
 
+
 # Imports
 
-import sys
-import os
+import collections
 import io
 import logging
-import collections
+import os
 
-### Pyndri primer
-import pyndri
-
+import sys
 import time
-import cProfile as profile
 
 from math import log
 
 import numpy as np
+### Pyndri primer
+import pyndri
 
 from scipy.stats import ttest_rel
 
 from PLM import PLM
 from kernels import k_gaussian
 from LSM import LSM
+
 
 # Funtion to generate run and write it to out_f
 def write_run(model_name, data, out_f,
@@ -146,7 +146,8 @@ tokenized_queries = {
 query_terms_inverted = collections.defaultdict(set)
 for query_id, query_term_ids in tokenized_queries.items():
     for query_term_id in query_term_ids:
-        query_terms_inverted[query_term_id].add(query_id)
+        # A lookup-table for what queries this term appears in
+        query_terms_inverted[query_term_id].add(int(query_id))
 
 
 query_term_ids = set(
@@ -216,7 +217,7 @@ for document_id in document_ids:
     num_unique_words[document_id] = len(document_words)
 
     for pos, id_at_pos in enumerate(positions):
-        if pos in query_term_ids:
+        if id_at_pos in query_term_ids:
             for query_id in query_terms_inverted[id_at_pos]:
                 query_word_positions[document_id][int(query_id)].append(pos)
 
@@ -249,38 +250,63 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
 
     # XXX: fill the data dictionary.
     # The dictionary data should have the form: query_id --> (document_score, external_doc_id)
+    if model_name == "PLM":
+        # Should probably just make this one of the global variables
+        query_word_positions = retrieval_func_params["query_word_positions"]
+        kernel = retrieval_func_params.get("kernel", k_gaussian)
+    elif model_name == "Embeddings":
+        # TODO: Fetch Embedding parameters here
+        pass
+
+    start = time.time()
+
+    query_times = 0
 
     for i, query in enumerate(queries.items()):
+
         print("Scoring query {} out of {} queries".format(i, len(queries)))
+        
+        query_start_time = time.time()
+
         query_id, _ = query
         query_term_ids = tokenized_queries[query_id]
 
         scores = []
 
-        for document_id in range(index.document_base(), index.maximum_document()):
-            ext_doc_id, _ = index.document(document_id)
+        for n, document_id in enumerate(document_ids):
+            ext_doc_id, document_word_positions = index.document(document_id)
+            
             score = 0
+            # TODO: Add embedding scoring
             if model_name == "PLM":  # PLMs need the query in it's entirety
-                if n % 100 == 0:
-                    print("\rScoring document {} out of {} documents ({:.2f} %)".format(
-                            document_id, index.maximum_document(), document_id / index.maximum_document() * 100
-                        ), flush=True, end=""
-                    )
+                # if n % 100 == 0:
+                    # print("\rScoring document {} out of {} documents ({:.2f} %)".format(
+                    #         document_id, index.maximum_document(), document_id / index.maximum_document() * 100
+                    #     ), flush=True, end=""
+                    # )
                 document_length = index.document_length(document_id)
                 plm = PLM(
-                    query_term_ids, document_length, query_word_positions[document_id][query_id],
+
+                    query_term_ids, document_length, query_word_positions[document_id][int(query_id)],
                     background_model=None, kernel=kernel
                 )
                 score = plm.best_position_strategy_score()
-                #print("Score: ", score)
             else:
                 for query_term_id in query_term_ids:
                     document_term_frequency = inverted_index[query_term_id][document_id]
                     score += score_fn(document_id, query_term_id, document_term_frequency, \
                             tuning_parameter=retrieval_func_params["tuning_parameter"])
             ranking[model_name][query_id].append((score, ext_doc_id))
-
+            
         ranking[model_name][query_id] = list(sorted(ranking[model_name][query_id], reverse=True))[:max_objects_per_query]
+
+        query_end_time = time.time()
+        query_time = query_end_time - query_start_time
+        query_times += query_time
+        average_query_time = query_times / max(i, 1)
+        querys_left = len(queries) - i
+        print("\rThe average query time is {} seconds, so for the remaining {} querys we estimate that it will take {} seconds"\
+                .format(average_query_time, querys_left, average_query_time * querys_left))
 
     with open('./lexical_results/{}'.format(run_out_path), 'w') as f_out:
         write_run(
@@ -289,12 +315,15 @@ def run_retrieval(model_name, score_fn, document_ids, max_objects_per_query=1000
             out_f=f_out,
             max_objects_per_query=1000)
 
+
 def idf(term_id):
     df_t = id2df[term_id]
     return log(num_documents) - log(df_t)
 
+
 def tf_idf(_, term_id, document_term_freq, tuning_parameter=None):
     return log(1 + document_term_freq) * idf(term_id)
+
 
 def bm25(document_id, term_id, document_term_freq, tuning_parameter=None):
     """
@@ -327,6 +356,7 @@ def bm25(document_id, term_id, document_term_freq, tuning_parameter=None):
 
     return bm25_formula(term_id, document_term_freq, l_d, l_average)
 
+
 def LM_jelinek_mercer_smoothing(int_document_id, query_term_id, document_term_freq, tuning_parameter=0.1):
     tf = document_term_freq
     lamb = tuning_parameter
@@ -342,6 +372,7 @@ def LM_jelinek_mercer_smoothing(int_document_id, query_term_id, document_term_fr
     # TODO(Santhosh): take log of the final result ?
     return prob_q_d
 
+
 def LM_dirichelt_smoothing(int_document_id, query_term_id, document_term_freq, tuning_parameter=500):
     tf = document_term_freq
     mu = tuning_parameter
@@ -353,6 +384,7 @@ def LM_dirichelt_smoothing(int_document_id, query_term_id, document_term_freq, t
 
     # TODO(Santhosh): take log of the final result ?
     return prob_q_d
+
 
 def absolute_discounting(document_id, term_id, document_term_freq, tuning_parameter=0.1):
     discount = tuning_parameter
@@ -384,7 +416,7 @@ def create_all_run_files():
     for val in j_m__lambda_values:
         start = time.time()
         print("Running LM_jelinek", val)
-        run_retrieval('jelinek_mercer_{}'.format(val), LM_jelinek_mercer_smoothing, document_ids, tuning_parameter=val)
+        run_retrieval('jelinek_mercer_{}'.format(str(val).replace(".", "_")), LM_jelinek_mercer_smoothing, document_ids, tuning_parameter=val)
         end = time.time()
         print("Retrieval took {:.2f} seconds.".format(end-start))
 
@@ -392,7 +424,7 @@ def create_all_run_files():
     for val in dirichlet_values:
         start = time.time()
         print("Dunning Dirichlet", val)
-        run_retrieval('dirichlet_mu_{}'.format(val), LM_dirichelt_smoothing, document_ids, tuning_parameter=val)
+        run_retrieval('dirichlet_mu_{}'.format(str(val).replace(".", "_")), LM_dirichelt_smoothing, document_ids, tuning_parameter=val)
         end = time.time()
         print("Retrieval took {:.2f} seconds.".format(end-start))
 
@@ -400,13 +432,14 @@ def create_all_run_files():
     for val in absolute_discounting_values:
         start = time.time()
         print("Running ABS_discount", val)
-        run_retrieval('abs_disc_delta_{}'.format(val), absolute_discounting, document_ids, tuning_parameter=val)
+        run_retrieval('abs_disc_delta_{}'.format(str(val).replace(".", "_")), absolute_discounting, document_ids, tuning_parameter=val)
         end = time.time()
         print("Retrieval took {:.2f} seconds.".format(end-start))
 
     # TODO: PLM when it is ready
 
-create_all_run_files()
+# create_all_run_files()
+run_retrieval('PLM', None, document_ids=document_ids, query_word_positions=query_word_positions)
 
 # TODO implement tools to help you with the analysis of the results.
 
@@ -597,22 +630,7 @@ def score_by_centroids(query_token_ids, pyndri_index, vector_collection, documen
 # # TODO implement the rest of the retrieval functions
 #
 # # TODO implement tools to help you with the analysis of the results.
-#
-#
-# # # ------------------------------
-# # # Task 2: Latent Semantic Models
-# # # ------------------------------
-# #
-# # # -----------------------------------
-# # # Task 3: Word embeddings for ranking
-# # # -----------------------------------
-# #
-# #
-# # # ------------------------------
-# # # Task 4: Learning to rank (LTR)
-# # # ------------------------------
-# #
-# #
+
 # # # --------------------
 # # # Task 5: Write report
 # # # --------------------

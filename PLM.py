@@ -4,11 +4,9 @@ import numpy as np
 
 class PLM:
     # OBS: PLMs need the entire query to score a document. Just the query term_id is not sufficient
-    def __init__(self, query_term_ids, document_length, total_number_of_documents, query_term_positions,
-                 background_model, kernel):
+    def __init__(self, query_term_ids, document_length, query_term_positions, background_model, kernel):
         self.query_term_ids = query_term_ids
         self.document_length = document_length
-        self.C = total_number_of_documents
         self.query_term_positions = query_term_positions
         self.background_model = background_model # A (preferably smoothed) language model of the form back_model[term_id] = counts of the term
         self.kernel = kernel()
@@ -88,12 +86,25 @@ class PLM:
                 if not self.background_model else self.p_w_D_i_smoothed(i, counts, query_term_id)
 
             if pwdi != 0:
-                score += -query_prob * log(query_prob / pwdi)
+                score += query_prob * log(query_prob / pwdi)
 
-        return score
+        return -score
 
-    def best_position_strategy_score(self):
+    def best_position_strategy_score(self, use_surrounding_positions=False):
         counts = self.propagate_counts(self.query_term_positions)
-        scores = np.array([self.S(i, counts) for i in self.position_indices])
-        return np.max(scores) if len(scores) > 0 else -np.inf
+
+        if use_surrounding_positions:
+            touched_positions = set()
+            for query_term_position in self.query_term_positions:
+                for i in range(-self.sigma, self.sigma):
+                    pos = query_term_position + i
+                    if pos > -1 and pos < self.document_length:
+                        touched_positions.add(pos)
+
+            scores = np.array([self.S(i, counts) for i in touched_positions])
+
+        else:
+            scores = np.array([self.S(i, counts) for i in self.query_term_positions])
+
+        return np.max(scores) if len(scores) > 0 else 0
 
