@@ -22,16 +22,16 @@ run_dirichlet () {
 run_single_evaluation "tfidf"
 
 # BM25
-run_single_evaluation "BM25"
+run_single_evaluation "bm25"
 
 # Jelinek-Mercer
-run_parameters_between_1 "jelinek_mercer"
+run_parameters_between_1 "LM_jelinek_mercer_smoothing"
 
 # Dirichlet
-run_dirichlet "dirichlet_mu"
+run_dirichlet "LM_dirichelt_smoothing"
 
 # Absolute discounting
-run_parameters_between_1 "abs_disc_delta"
+run_parameters_between_1 "LM_absolute_discounting"
 
 # PLM
 run_single_evaluation "PLM_passage"

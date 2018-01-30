@@ -477,7 +477,7 @@ def LM_dirichelt_smoothing(int_document_id, query_term_id, document_term_freq, t
 
     return np.log(prob_q_d)
 
-def absolute_discounting(document_id, term_id, document_term_freq, tuning_parameter=0.1):
+def LM_absolute_discounting(document_id, term_id, document_term_freq, tuning_parameter=0.1):
     discount = tuning_parameter
     d = index.document_length(document_id)
     C = collection_length
@@ -497,7 +497,7 @@ def create_all_lexical_run_files():
 
     start = time.time()
     print("Running BM25")
-    run_retrieval('BM25', bm25, document_ids, tuning_parameter=None)
+    run_retrieval('bm25', bm25, document_ids, tuning_parameter=None)
     end = time.time()
     print("Retrieval took {:.2f} seconds.".format(end-start))
 
@@ -505,7 +505,7 @@ def create_all_lexical_run_files():
     for val in j_m__lambda_values:
         start = time.time()
         print("Running LM_jelinek", val)
-        run_retrieval('jelinek_mercer_{}'.format(str(val).replace(".", "_")), LM_jelinek_mercer_smoothing, document_ids, tuning_parameter=val)
+        run_retrieval('LM_jelinek_mercer_smoothing_{}'.format(str(val).replace(".", "_")), LM_jelinek_mercer_smoothing, document_ids, tuning_parameter=val)
         end = time.time()
         print("Retrieval took {:.2f} seconds.".format(end-start))
 
@@ -513,7 +513,7 @@ def create_all_lexical_run_files():
     for val in dirichlet_values:
         start = time.time()
         print("Running Dirichlet", val)
-        run_retrieval('dirichlet_mu_{}'.format(str(val).replace(".", "_")), LM_dirichelt_smoothing, document_ids, tuning_parameter=val)
+        run_retrieval('LM_dirichelt_smoothing_{}'.format(str(val).replace(".", "_")), LM_dirichelt_smoothing, document_ids, tuning_parameter=val)
         end = time.time()
         print("Retrieval took {:.2f} seconds.".format(end-start))
 
@@ -521,7 +521,7 @@ def create_all_lexical_run_files():
     for val in absolute_discounting_values:
         start = time.time()
         print("Running ABS_discount", val)
-        run_retrieval('abs_disc_delta_{}'.format(str(val).replace(".", "_")), absolute_discounting, document_ids, tuning_parameter=val)
+        run_retrieval('LM_absolute_discounting_{}'.format(str(val).replace(".", "_")), LM_absolute_discounting, document_ids, tuning_parameter=val)
         end = time.time()
         print("Retrieval took {:.2f} seconds.".format(end-start))
 
