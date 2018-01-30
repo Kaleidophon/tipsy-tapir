@@ -22,7 +22,7 @@ import pyndri
 from scipy.stats import ttest_rel
 
 from PLM import PLM
-from kernels import k_gaussian
+from kernels import k_passage, k_gaussian, k_cosine, k_triangle, k_circle
 from LSM import LSM
 
 
@@ -384,7 +384,7 @@ def absolute_discounting(document_id, term_id, document_term_freq, tuning_parame
 
     return np.log(max(document_term_freq - discount, 0) / d + ((discount * number_of_unique_terms) / d) * (tf_C[term_id] / C))
 
-def create_all_run_files():
+def create_all_lexical_run_files():
     print("##### Creating all run files! #####")
 
     start = time.time()
@@ -423,10 +423,32 @@ def create_all_run_files():
         end = time.time()
         print("Retrieval took {:.2f} seconds.".format(end-start))
 
-    # TODO: PLM when it is ready
+    start = time.time()
+    run_retrieval('PLM_passage', None, document_ids=document_ids, query_word_positions=query_word_positions, kernel=k_passage)
+    end = time.time()
+    print("Retrieval took {:.2f} seconds.".format(end-start))
+
+    start = time.time()
+    run_retrieval('PLM_gaussian', None, document_ids=document_ids, query_word_positions=query_word_positions, kernel=k_gaussian)
+    end = time.time()
+    print("Retrieval took {:.2f} seconds.".format(end-start))
+    start = time.time()
+
+    run_retrieval('PLM_triangle', None, document_ids=document_ids, query_word_positions=query_word_positions, kernel=k_triangle)
+    end = time.time()
+    print("Retrieval took {:.2f} seconds.".format(end-start))
+    start = time.time()
+
+    run_retrieval('PLM_cosine', None, document_ids=document_ids, query_word_positions=query_word_positions, kernel=k_cosine)
+    end = time.time()
+    print("Retrieval took {:.2f} seconds.".format(end-start))
+    start = time.time()
+
+    run_retrieval('PLM_circle', None, document_ids=document_ids, query_word_positions=query_word_positions, kernel=k_circle)
+    end = time.time()
+    print("Retrieval took {:.2f} seconds.".format(end-start))
 
 # create_all_run_files()
-run_retrieval('PLM', None, document_ids=document_ids, query_word_positions=query_word_positions)
 
 # TODO implement tools to help you with the analysis of the results.
 
