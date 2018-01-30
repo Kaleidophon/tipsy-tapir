@@ -340,7 +340,7 @@ def generate_query_likelihood_model():
 
 def idf(term_id):
     df_t = id2df[term_id]
-    return log(total_number_of_documents) - log(df_t)
+    return log(num_documents) - log(df_t)
 
 def tf_idf(_, term_id, document_term_freq, tuning_parameter=None):
     return log(1 + document_term_freq) * idf(term_id)
@@ -375,15 +375,6 @@ def bm25(document_id, term_id, document_term_freq, tuning_parameter=None):
     l_d = index.document_length(document_id)
 
     return bm25_formula(term_id, document_term_freq, l_d, l_average)
-
-term_doc_prob = doc['terms'].get(token_id, 0) / doc['length']
-term_col_prob = id2colfreq[token_id] / collection_length
-jelinek_mercer(term_doc_prob, term_col_prob, lmbda)
-collection_model = lmbda * term_col_prob
-
-# Smoothed seen probabililty.
-seen_prob = ((1.-lmbda) * term_doc_prob) + collection_model
-np.log(seen_prob)
 
 def LM_jelinek_mercer_smoothing(int_document_id, query_term_id, document_term_freq, tuning_parameter=0.1):
     tf = document_term_freq
