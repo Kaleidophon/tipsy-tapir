@@ -386,7 +386,7 @@ def LM_absolute_discounting(index, query_id, document_id, document_term_freq, nu
         discount = tuning_parameter
         d = index.document_length(document_id)
         C = collection_length
-        if d == 0: return 0
+        if d == 0: return -9999
         number_of_unique_terms = num_unique_words[document_id]
 
         log_sum += np.log(
