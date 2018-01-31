@@ -9,21 +9,12 @@ class LTRDataSet(Dataset):
         super().__init__()
         self.inputs = inputs
         self.outputs = outputs
-        self.data = [(torch.from_numpy(np.array(inputs[i])).float(), torch.from_numpy(np.array([outputs[i]])).float()) for i in range(len(inputs))]
 
-    def __getitem__(self, item):
-        return self.data[item]
-
-    def __len__(self):
-        return len(self.inputs)
-
-    def __iter__(self):
-        for x, y in self.data:
-            yield (x, y)
-
-def create_input_and_output_matrix(features, training_set):
+def create_input_and_output_matrix(features, training_set, test_set):
     input_matrix = []
     output_vector = []
+
+    test_features = []
 
     # We only iterate over the query-document pairs we actually
     # have features for
@@ -37,7 +28,11 @@ def create_input_and_output_matrix(features, training_set):
                 input_matrix.append(feature_vector)
                 output_vector.append(training_set[query_id][document_id])
 
-    return input_matrix, output_vector
+            if document_id in test_set[query_id]:
+                test_features.append((query_id, document_id, feature_vector))
+
+
+    return input_matrix, output_vector, test_features
 
 def cross_validation_set(filepath, k, i):
     """
@@ -97,8 +92,7 @@ def get_dataset_for_features(features, k=10, i=0):
     training_data, test_data = cross_validation_set(data_filepath, k, i)
     # We can now use different values of i to use different portions of the data as test data
 
-    inputs, outputs = create_input_and_output_matrix(features, training_data)
-    return LTRDataSet(inputs, outputs), test_data
-
+    inputs, outputs, test_features = create_input_and_output_matrix(features, training_data, test_data)
+    return LTRDataSet(inputs, outputs), test_features
 
 print()

@@ -21,7 +21,7 @@ from kernels import k_passage, k_gaussian, k_cosine, k_triangle, k_circle
 from lsm import LSM
 from plm import PLM
 from LTR import get_dataset_for_features
-from models import LinearRanker, train
+from models import train
 
 # GLOBALS
 rankings = collections.defaultdict(lambda: collections.defaultdict(list))
@@ -907,6 +907,23 @@ def extract_features(queries, document_ids, index,\
     write_features_to_file(features, "./features.txt")
     return features
 
+def evaluate_model(model, test_features, run_out_path, cross_id):
+    scores = collections.defaultdict(list)
+
+    for feature in test_features:
+        query_id, ext_document_id, feature_vector = feature
+        feature_vector = np.array(feature_vector)
+        score = model.predict(feature_vector.reshape(1, -1))
+        scores[int(query_id)].append((float(score), ext_document_id))
+
+    with open('{}{}.run'.format(run_out_path, cross_id), 'w') as f_out:
+        write_run(
+            model_name="regression",
+            data=scores,
+            out_f=f_out,
+            max_objects_per_query=1000)
+
+
 if __name__ == "__main__":
     index, token2id, id2token, id2df, dictionary, document_ids = create_index_resources()
     num_documents = len(document_ids)
@@ -917,21 +934,18 @@ if __name__ == "__main__":
         collection_length = build_misc_resources(document_ids, query_terms_inverted)
     document_term_freqs = inverted_index
 
-    # create_all_lexical_run_files(
-    #     index, document_ids, queries, document_term_freqs, collection_length, tf_C,
-    #     tokenized_queries, background_model=tf_C, idf2df=id2df, num_documents=num_documents
-    # )
+    create_all_lexical_run_files(
+        index, document_ids, queries, document_term_freqs, collection_length, tf_C,
+        tokenized_queries, background_model=tf_C, idf2df=id2df, num_documents=num_documents
+    )
     features = extract_features(queries, document_ids, index,\
             document_term_freqs, avg_doc_length, id2df, num_documents, tokenized_queries, collection_length)
 
-    datasets, test_set = zip(*[get_dataset_for_features(features, i=i) for i in range(10)])
-    test_set = test_set[0]
+    datasets, test_features = zip(*[get_dataset_for_features(features, i=i) for i in range(10)])
+    test_features = test_features[0]
+
+    id2ext, ext2id = get_document_id_maps(index, document_ids)
 
     for i, dataset in enumerate(datasets):
-        model = LinearRanker()
-        train(model, dataset, print_losses=True, iterations=1, batch_size=5000, \
-              log_file="./model{}".format(i))
-
-        break
-
-
+        model = train(dataset)
+        evaluate_model(model, test_features, "./regression", i)
