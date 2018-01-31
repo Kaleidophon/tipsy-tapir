@@ -2,7 +2,11 @@
 
 Homework assignment 2 for Universiteit van Amsterdam's Information Retrieval lecture during the winter term 2017/2018 for Stian Steinbakken, Dennis Ulmer and Santhosh Kumar Rajamanickam.
 
-## Instructions
+# Dependencies
+To install code dependencies run:
+```pip3 install -r requirements.txt```
+
+## General instructions
 
 The program can be executed by running the `run_retrieval` function with the desired model. An example would be to alter `homework2.py`
 to include: `run_retrieval('PLM', None, document_ids=document_ids, query_word_positions=query_word_positions)` and run the file by typing
