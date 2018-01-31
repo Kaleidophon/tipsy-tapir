@@ -401,61 +401,62 @@ def create_all_lexical_run_files(index, document_ids, queries, document_term_fre
                                  tokenized_queries, background_model, idf2df, num_documents):
     print("##### Creating all lexical run files! #####")
 
-    start = time.time()
-    print("Running TFIDF")
-    run_retrieval(
-        index, 'tfidf', queries, document_ids, tf_idf,
-        document_term_freqs=document_term_freqs, tokenized_queries=tokenized_queries, id2df=idf2df,
-        num_documents=num_documents
-    )
-    end = time.time()
-    print("Retrieval took {:.2f} seconds.".format(end-start))
+    # TODO: Uncomment before delivery
+    # start = time.time()
+    # print("Running TFIDF")
+    # run_retrieval(
+    #     index, 'tfidf', queries, document_ids, tf_idf,
+    #     document_term_freqs=document_term_freqs, tokenized_queries=tokenized_queries, id2df=idf2df,
+    #     num_documents=num_documents
+    # )
+    # end = time.time()
+    # print("Retrieval took {:.2f} seconds.".format(end-start))
+    #
+    # start = time.time()
+    # print("Running BM25")
+    # run_retrieval(
+    #     index, 'bm25', queries, document_ids, bm25,
+    #     document_term_freqs=document_term_freqs, avg_doc_length=avg_doc_length, id2df=id2df,
+    #     num_documents=num_documents, tokenized_queries=tokenized_queries
+    # )
+    # end = time.time()
+    # print("Retrieval took {:.2f} seconds.".format(end-start))
+    #
+    # j_m__lambda_values = [0.1, 0.3, 0.5, 0.7, 0.9]
+    # for val in j_m__lambda_values:
+    #     start = time.time()
+    #     print("Running LM_jelinek", val)
+    #     run_retrieval(
+    #         index, 'LM_jelinek_mercer_smoothing_{}'.format(str(val).replace(".", "_")),
+    #         queries, document_ids, LM_jelinek_mercer_smoothing,
+    #         tuning_parameter=val, document_term_freqs=document_term_freqs, collection_length=collection_length,
+    #         tf_C=tf_C, tokenized_queries=tokenized_queries
+    #     )
+    #     end = time.time()
+    #     print("Retrieval took {:.2f} seconds.".format(end-start))
+    #
+    # dirichlet_values = [500, 1000, 1500]
+    # for val in dirichlet_values:
+    #     start = time.time()
+    #     print("Running Dirichlet", val)
+    #     run_retrieval(
+    #         index, 'LM_dirichelt_smoothing_{}'.format(str(val).replace(".", "_")),
+    #         document_ids, queries, LM_dirichlet_smoothing,
+    #         tuning_parameter=val, document_term_freqs=document_term_freqs, collection_length=collection_length,
+    #         tokenized_queries=tokenized_queries
+    #     )
+    #     end = time.time()
+    #     print("Retrieval took {:.2f} seconds.".format(end-start))
+    #
+    # absolute_discounting_values = j_m__lambda_values
+    # for val in absolute_discounting_values:
+    #     start = time.time()
+    #     print("Running ABS_discount", val)
+    #     run_retrieval('LM_absolute_discounting_{}'.format(str(val).replace(".", "_")), LM_absolute_discounting, document_ids, tuning_parameter=val)
+    #     end = time.time()
+    #     print("Retrieval took {:.2f} seconds.".format(end-start))
 
-    start = time.time()
-    print("Running BM25")
-    run_retrieval(
-        index, 'bm25', queries, document_ids, bm25,
-        document_term_freqs=document_term_freqs, avg_doc_length=avg_doc_length, id2df=id2df,
-        num_documents=num_documents, tokenized_queries=tokenized_queries
-    )
-    end = time.time()
-    print("Retrieval took {:.2f} seconds.".format(end-start))
-
-    j_m__lambda_values = [0.1, 0.3, 0.5, 0.7, 0.9]
-    for val in j_m__lambda_values:
-        start = time.time()
-        print("Running LM_jelinek", val)
-        run_retrieval(
-            index, 'LM_jelinek_mercer_smoothing_{}'.format(str(val).replace(".", "_")),
-            queries, document_ids, LM_jelinek_mercer_smoothing,
-            tuning_parameter=val, document_term_freqs=document_term_freqs, collection_length=collection_length,
-            tf_C=tf_C, tokenized_queries=tokenized_queries
-        )
-        end = time.time()
-        print("Retrieval took {:.2f} seconds.".format(end-start))
-
-    dirichlet_values = [500, 1000, 1500]
-    for val in dirichlet_values:
-        start = time.time()
-        print("Running Dirichlet", val)
-        run_retrieval(
-            index, 'LM_dirichelt_smoothing_{}'.format(str(val).replace(".", "_")),
-            document_ids, queries, LM_dirichlet_smoothing,
-            tuning_parameter=val, document_term_freqs=document_term_freqs, collection_length=collection_length,
-            tokenized_queries=tokenized_queries
-        )
-        end = time.time()
-        print("Retrieval took {:.2f} seconds.".format(end-start))
-
-    absolute_discounting_values = j_m__lambda_values
-    for val in absolute_discounting_values:
-        start = time.time()
-        print("Running ABS_discount", val)
-        run_retrieval('LM_absolute_discounting_{}'.format(str(val).replace(".", "_")), LM_absolute_discounting, document_ids, tuning_parameter=val)
-        end = time.time()
-        print("Retrieval took {:.2f} seconds.".format(end-start))
-
-    start = time.time()
+    # start = time.time()
     run_retrieval_plm(
         index, 'PLM_passage', queries, document_ids, query_word_positions, background_model, tokenized_queries,
         kernel=k_passage
