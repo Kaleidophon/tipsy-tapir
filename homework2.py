@@ -23,7 +23,6 @@ from plm import PLM
 
 # GLOBALS
 rankings = collections.defaultdict(lambda: collections.defaultdict(list))
-reranking_ids = collections.defaultdict(set)
 
 
 # Function to generate run and write it to out_f
@@ -250,17 +249,9 @@ def run_retrieval(index, model_name, queries, document_ids, scoring_func, max_ob
         query_id, _ = query
         query_scores = []
 
-        ranked_docs = set()
-        if "embedding" in model_name:
-            ranked_docs = {ranking[1] for ranking in rankings["tfidf"][int(query_id)]}
-
         # Do actual scoring here
         for n, document_id in enumerate(document_ids):
             ext_doc_id, document_word_positions = index.document(document_id)
-
-            if "embedding" in model_name and ext_doc_id not in ranked_docs:
-                continue
-
             score = scoring_func(index, query_id, document_id, **resource_params)
             query_scores.append((score, ext_doc_id))
 
