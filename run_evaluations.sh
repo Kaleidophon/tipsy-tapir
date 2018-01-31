@@ -13,6 +13,14 @@ run_parameters_between_1 () {
   $relative_trec_eval_path -m all_trec -q ap_88_89/qrel_test ./lexical_results/"$1"_0_9.run  > ./lexical_results/"$1"_results_0_9.txt
 }
 
+run_plm () {
+  $relative_trec_eval_path -m all_trec -q ap_88_89/qrel_test ./lexical_results/"$1"_passage.run  > ./lexical_results/"$1"_results_passage.txt
+  $relative_trec_eval_path -m all_trec -q ap_88_89/qrel_test ./lexical_results/"$1"_gaussian.run  > ./lexical_results/"$1"_results_gaussian.txt
+  $relative_trec_eval_path -m all_trec -q ap_88_89/qrel_test ./lexical_results/"$1"_triangle.run  > ./lexical_results/"$1"_results_triangle.txt
+  $relative_trec_eval_path -m all_trec -q ap_88_89/qrel_test ./lexical_results/"$1"_cosine.run  > ./lexical_results/"$1"_results_cosine.txt
+  $relative_trec_eval_path -m all_trec -q ap_88_89/qrel_test ./lexical_results/"$1"_circle.run  > ./lexical_results/"$1"_results_circle.txt
+}
+
 run_dirichlet () {
   $relative_trec_eval_path -m all_trec -q ap_88_89/qrel_test ./lexical_results/"$1"_500.run  > ./lexical_results/"$1"_results_500.txt
   $relative_trec_eval_path -m all_trec -q ap_88_89/qrel_test ./lexical_results/"$1"_1000.run > ./lexical_results/"$1"_results_1000.txt
@@ -35,15 +43,7 @@ run_dirichlet "LM_dirichelt_smoothing"
 run_parameters_between_1 "LM_absolute_discounting"
 
 # PLM
-run_single_evaluation "PLM_passage"
-
-run_single_evaluation "PLM_gaussian"
-
-run_single_evaluation "PLM_triangle"
-
-run_single_evaluation "PLM_cosine"
-
-run_single_evaluation "PLM_circle"
+run_plm "PLM"
 
 # LSM
 run_single_evaluation "LSI"

@@ -6,7 +6,7 @@ import collections
 np.random.seed(12345678) # fix random seed to get same numbers
 
 relevant_values = set(["ndcg_cut_10", "map_cut_1000", "P_5", "recall_1000"])
-lang_models = set(['LM_jelinek_mercer_smoothing','LM_dirichelt_smoothing','LM_absolute_discounting', 'PLM_passage','PLM_gaussian','PLM_triangle', 'PLM_cosine','PLM_circle'])
+lang_models = set(['LM_jelinek_mercer_smoothing','LM_dirichelt_smoothing','LM_absolute_discounting', 'PLM'])
 value_to_name = {
         "ndcg_cut_10" : "NDCG@10",
         "map_cut_1000" : "MAP@1000",
@@ -37,6 +37,7 @@ class Evaluation():
         for key, value in self.relevant_values.items():
             print(value_to_name[key], value)
 
+
     def plot(self, x_values, y_values, x_label, y_label):
         plt.xlabel(x_label)
         plt.ylabel(y_label)
@@ -58,7 +59,6 @@ class Evaluation():
             self.plot(parameters, ndcg_values, paramterer_name, "NDCG@10")
 
             return ndcg_values
-
 
 def significance_testing(all_values_base, all_values_experiment):
 
@@ -103,6 +103,7 @@ for i in range(len(jel_ndcg_values)):
         max_index = i
         break
 print("\nMax JM values")
+print('LM_jelinek_mercer_smoothing_{}'.format(str(jel_params[max_index]).replace(".", "_")))
 jm_max = Evaluation('LM_jelinek_mercer_smoothing_{}'.format(str(jel_params[max_index]).replace(".", "_")))
 jm_max.get_results('LM_jelinek_mercer_smoothing_results_{}.txt'.format(str(jel_params[max_index]).replace(".", "_")))
 
@@ -119,6 +120,7 @@ for i in range(len(dir_ndcg_values)):
         max_index = i
         break
 print("\nMax Dirichlet Prior values")
+print('LM_dirichelt_smoothing_{}'.format(str(dirich_params[max_index]).replace(".", "_")))
 dirich_max = Evaluation('LM_dirichelt_smoothing_{}'.format(str(dirich_params[max_index]).replace(".", "_")))
 dirich_max.get_results('LM_dirichelt_smoothing_results_{}.txt'.format(str(dirich_params[max_index]).replace(".", "_")))
 
@@ -134,11 +136,27 @@ for i in range(len(abs_ndcg_values)):
         max_index = i
         break
 print("\nMax Absolute discounting values")
+print('LM_absolute_discounting_{}'.format(str(jel_params[max_index]).replace(".", "_")))
 abs_max = Evaluation('LM_absolute_discounting_{}'.format(str(jel_params[max_index]).replace(".", "_")))
 abs_max.get_results('LM_absolute_discounting_results_{}.txt'.format(str(jel_params[max_index]).replace(".", "_")))
 
 # PLM
-# TODO: evaluate PLM
+plm_params = ['circle','cosine','triangle','gaussian','passage']
+plm = Evaluation('PLM')
+plm_ndcg_values = plm.plot_ndcg(plm_params, "delta")
+print("\nPLM values:")
+print(plm_ndcg_values)
+max_plm_value = max(plm_ndcg_values)
+max_index = None
+for i in range(len(plm_ndcg_values)):
+    if plm_ndcg_values[i] == max_plm_value:
+        max_index = i
+        break
+print("\nMax PLM values")
+print('PLM_{}'.format(str(plm_params[max_index]).replace(".", "_")))
+plm_max = Evaluation('PLM_{}'.format(str(plm_params[max_index]).replace(".", "_")))
+plm_max.get_results('PLM_results_{}.txt'.format(str(plm_params[max_index]).replace(".", "_")))
+
 
 # Significance Testing TF-IDF vs all LMs
 print("\nTF-IDF vs. BM25")
@@ -149,7 +167,8 @@ print("\nTF-IDF vs. LM-Dirichelt")
 significance_testing(tfidf.all_values, dirich_max.all_values)
 print("\nTF-IDF vs. LM-Absolute-Discounting")
 significance_testing(tfidf.all_values, abs_max.all_values)
-
+print("\nTF-IDF vs. PLM")
+significance_testing(tfidf.all_values, plm_max.all_values)
 
 # LSM
 print("\nLSI values")
