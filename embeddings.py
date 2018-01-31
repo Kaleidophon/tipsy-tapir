@@ -294,7 +294,7 @@ vectors = VectorCollection.load_vectors("./w2v_60")
 # 5. - 8.
 print("Precomputing vector document representations 5. - 7. with W_in vectors...")
 precomputed_document_representations_win_5_7 = calculate_document_representations(
-    index, vectors, document_ids, doc_kmeans, doc_tfidf_scaling, doc_kmeans_tfidf, #doc_circular_conv,
+    index, vectors, document_ids, doc_kmeans, doc_tfidf_scaling, #doc_kmeans_tfidf, #doc_circular_conv,
     document_term_freqs=term_frequencies, id2df=id2df, number_of_documents=num_documents
 )
 save_document_representations(precomputed_document_representations_win_5_7, "./win_representations_5_7")
