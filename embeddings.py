@@ -239,39 +239,39 @@ def load_document_representations(path):
     return h5py.File(path, "r")
 
 
-print("Loading index and such...")
-index = pyndri.Index('index/')
-token2id, id2token, id2df = index.get_dictionary()
-num_documents = index.maximum_document() - index.document_base()
-term_frequencies = defaultdict(lambda: Counter())
-
-dictionary = pyndri.extract_dictionary(index)
-document_ids = list(range(index.document_base(), index.maximum_document()))
-
-with open('./ap_88_89/topics_title', 'r') as f_topics:
-    queries = parse_topics([f_topics])
-
-tokenized_queries = {
-    query_id: [dictionary.translate_token(token)
-               for token in index.tokenize(query_string)
-               if dictionary.has_token(token)]
-    for query_id, query_string in queries.items()}
-
-query_term_ids = set(
-    query_term_id
-    for query_term_ids in tokenized_queries.values()
-    for query_term_id in query_term_ids)
-
-print('Gathering statistics about', len(query_term_ids), 'terms.')
-
-for int_doc_id in document_ids:
-    ext_doc_id, doc_token_ids = index.document(int_doc_id)
-    term_frequencies[int_doc_id] += Counter([token_id for token_id in doc_token_ids if token_id in query_term_ids])
-
-
-print("Reading word embeddings...")
-
-vectors = VectorCollection.load_vectors("./w2v_60")
+# print("Loading index and such...")
+# index = pyndri.Index('index/')
+# token2id, id2token, id2df = index.get_dictionary()
+# num_documents = index.maximum_document() - index.document_base()
+# term_frequencies = defaultdict(lambda: Counter())
+#
+# dictionary = pyndri.extract_dictionary(index)
+# document_ids = list(range(index.document_base(), index.maximum_document()))
+#
+# with open('./ap_88_89/topics_title', 'r') as f_topics:
+#     queries = parse_topics([f_topics])
+#
+# tokenized_queries = {
+#     query_id: [dictionary.translate_token(token)
+#                for token in index.tokenize(query_string)
+#                if dictionary.has_token(token)]
+#     for query_id, query_string in queries.items()}
+#
+# query_term_ids = set(
+#     query_term_id
+#     for query_term_ids in tokenized_queries.values()
+#     for query_term_id in query_term_ids)
+#
+# print('Gathering statistics about', len(query_term_ids), 'terms.')
+#
+# for int_doc_id in document_ids:
+#     ext_doc_id, doc_token_ids = index.document(int_doc_id)
+#     term_frequencies[int_doc_id] += Counter([token_id for token_id in doc_token_ids if token_id in query_term_ids])
+#
+#
+# print("Reading word embeddings...")
+#
+# vectors = VectorCollection.load_vectors("./w2v_60")
 # different representations:
 # 1. Coordinate-wise min
 # 2. Coordinate-wise max
@@ -292,13 +292,13 @@ vectors = VectorCollection.load_vectors("./w2v_60")
 # del precomputed_document_representations_win_1_4
 
 # 5. - 8.
-print("Precomputing vector document representations 5. - 7. with W_in vectors...")
-precomputed_document_representations_win_5_7 = calculate_document_representations(
-    index, vectors, document_ids, doc_kmeans, doc_tfidf_scaling, #doc_kmeans_tfidf, #doc_circular_conv,
-    document_term_freqs=term_frequencies, id2df=id2df, number_of_documents=num_documents
-)
-save_document_representations(precomputed_document_representations_win_5_7, "./win_representations_5_7")
-del precomputed_document_representations_win_5_7
+# print("Precomputing vector document representations 5. - 7. with W_in vectors...")
+# precomputed_document_representations_win_5_7 = calculate_document_representations(
+#     index, vectors, document_ids, doc_kmeans, doc_tfidf_scaling, #doc_kmeans_tfidf, #doc_circular_conv,
+#     document_term_freqs=term_frequencies, id2df=id2df, number_of_documents=num_documents
+# )
+# save_document_representations(precomputed_document_representations_win_5_7, "./win_representations_5_7")
+# del precomputed_document_representations_win_5_7
 
 
 # W_out representations

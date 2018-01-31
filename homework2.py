@@ -612,12 +612,12 @@ def run_retrieval_embeddings_So(index, model_name, queries, document_ids, id2tok
             return -1
 
         query_vector = combination_func(query_vectors, token_ids=tokenized_queries[query_id], **resource_params)
-        if type(query_vector) == tuple:
-            query_vector, _ = query_vector
+        query_vector = unpack_vec(query_vector)
 
         try:
             lookup_id = document_id if doc2repr is None else doc2repr[document_id]
             document_vector = document_representations[lookup_id]
+            document_vector = unpack_vec(document_vector)
         except KeyError as ie:
             # Empty documents, give worst score
             return -1
@@ -733,6 +733,13 @@ def create_document_id_to_repr_map(document_ids):
     return doc2repr
 
 
+def unpack_vec(vector):
+    while type(vector) == tuple:
+        vector = vector[0]
+
+    return vector
+
+
 # ------------------------------
 # Task 4: Learning to rank (LTR)
 # ------------------------------
@@ -764,6 +771,6 @@ if __name__ == "__main__":
     run_retrieval_embeddings_So(
         index, "embeddings_So_kmeans_win", queries, document_ids, id2token=id2token, vector_collection=vectors,
         document_representations=doc_representations.get("doc_kmeans"), tokenized_queries=tokenized_queries,
-        doc2repr=doc2repr, combination_func=doc_kmeans,
+        doc2repr=doc2repr, combination_func=doc_centroid,
         document_term_freqs=inverted_index, id2df=id2df, number_of_documents=num_documents, cache=dict()
     )
