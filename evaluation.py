@@ -8,7 +8,7 @@ np.random.seed(12345678) # fix random seed to get same numbers
 relevant_values = set(["ndcg_cut_10", "map_cut_1000", "P_5", "recall_1000"])
 lang_models = set(['LM_jelinek_mercer_smoothing','LM_dirichelt_smoothing','LM_absolute_discounting', 'PLM_passage','PLM_gaussian','PLM_triangle', 'PLM_cosine','PLM_circle'])
 value_to_name = {
-        "ndcg_cut_10" : "NDCG@1000",
+        "ndcg_cut_10" : "NDCG@10",
         "map_cut_1000" : "MAP@1000",
         "P_5" : "Presicion@5",
         "recall_1000" : "Recall@1000"
@@ -25,13 +25,6 @@ class Evaluation():
 
         values = {}
 
-        # TODO: check with Stian ?
-        # with open("./lexical_results/{}".format(filename), "r") as f:
-        #     for line in f.readlines():
-        #         value_name, _, value = line.split()
-        #         if value_name in relevant_values:
-        #             self.relevant_values[value_name] = value
-
         with open("./lexical_results/{}".format(filename), "r") as f:
             for line in f.readlines():
                 value_name, query_id, value = line.split()
@@ -39,7 +32,7 @@ class Evaluation():
                     if query_id == 'all':
                         self.relevant_values[value_name] = value
                     else:
-                        self.all_values[value_name] = value
+                        self.all_values[value_name].append(float(value))
 
         for key, value in self.relevant_values.items():
             print(value_to_name[key], value)
@@ -59,8 +52,8 @@ class Evaluation():
             for param in parameters:
                 with open("./lexical_results/{}_results_{}.txt".format(self.model_name, str(param).replace(".", "_")), "r") as f:
                     for line in f.readlines():
-                        value_name, _, value = line.split()
-                        if value_name == "ndcg_cut_10":
+                        value_name, query_id, value = line.split()
+                        if value_name == "ndcg_cut_10" and query_id == 'all':
                             ndcg_values.append(float(value))
             self.plot(parameters, ndcg_values, paramterer_name, "NDCG@10")
 
@@ -77,32 +70,41 @@ def significance_testing(all_values_base, all_values_experiment):
     for measure in relevant_values:
         if len(all_values_base[measure]) == len(all_values_experiment[measure]):
             m = len(all_values_base[measure])
-            t, p_value = ttest_rel(all_values_base[measure], all_values_experiment[measure])
+            t, p_value = stats.ttest_rel(all_values_base[measure], all_values_experiment[measure])
             if p_value <= (alpha/m):
-                print('Null hypothesis of equal averages rejected for {0}'.format(measure))
+                print('Null hypothesis rejected for {0}'.format(measure))
             else:
-                print('Null hypothesis of equal averages accepted for {0}'.format(measure))
+                print('Null hypothesis accepted for {0}'.format(measure))
         else:
             print('Error: m not equal')
 
 # TF-IDF
 print("\nTF-IDF values")
 tfidf = Evaluation('tfidf')
-tfidf.get_results("tfidf_results_validation.txt")
+tfidf.get_results("tfidf_results.txt")
 
 # BM25
 print("\nBM25 values")
 bm25 = Evaluation('bm25')
-bm25.get_results("BM25_results_validation.txt")
+bm25.get_results("bm25_results.txt")
 
 ### Models with varying paramters ###
 
 # Jelinek-Mercer
 jel_params = [0.1, 0.3, 0.5, 0.7, 0.9]
 jm = Evaluation('LM_jelinek_mercer_smoothing')
-jel_ndcg_values = jm.plot_ndcg(dataset_type, jel_params, "lambda")
+jel_ndcg_values = jm.plot_ndcg(jel_params, "lambda")
 print("\nJM values:")
 print(jel_ndcg_values)
+max_jm_value = max(jel_ndcg_values)
+max_index = None
+for i in range(len(jel_ndcg_values)):
+    if jel_ndcg_values[i] == max_jm_value:
+        max_index = i
+        break
+print("\nMax JM values")
+jm_max = Evaluation('LM_jelinek_mercer_smoothing_{}'.format(str(jel_params[max_index]).replace(".", "_")))
+jm_max.get_results('LM_jelinek_mercer_smoothing_results_{}.txt'.format(str(jel_params[max_index]).replace(".", "_")))
 
 # Dirichlet Prior
 dirich_params = [500, 1000, 1500]
@@ -110,12 +112,56 @@ dirich = Evaluation('LM_dirichelt_smoothing')
 dir_ndcg_values = dirich.plot_ndcg(dirich_params, "mu")
 print("\nDirichlet values:")
 print(dir_ndcg_values)
+max_dirich_value = max(dir_ndcg_values)
+max_index = None
+for i in range(len(dir_ndcg_values)):
+    if dir_ndcg_values[i] == max_dirich_value:
+        max_index = i
+        break
+print("\nMax Dirichlet Prior values")
+dirich_max = Evaluation('LM_dirichelt_smoothing_{}'.format(str(dirich_params[max_index]).replace(".", "_")))
+dirich_max.get_results('LM_dirichelt_smoothing_results_{}.txt'.format(str(dirich_params[max_index]).replace(".", "_")))
 
 # Absolute discounting
 ab_dis = Evaluation('LM_absolute_discounting')
-abs_ndcg_values = ab_dis.plot_ndcg(dataset_type, jel_params, "delta")
+abs_ndcg_values = ab_dis.plot_ndcg(jel_params, "delta")
 print("\nAbsolute disc values:")
 print(abs_ndcg_values)
+max_abs_value = max(abs_ndcg_values)
+max_index = None
+for i in range(len(abs_ndcg_values)):
+    if abs_ndcg_values[i] == max_abs_value:
+        max_index = i
+        break
+print("\nMax Absolute discounting values")
+abs_max = Evaluation('LM_absolute_discounting_{}'.format(str(jel_params[max_index]).replace(".", "_")))
+abs_max.get_results('LM_absolute_discounting_results_{}.txt'.format(str(jel_params[max_index]).replace(".", "_")))
 
 # PLM
 # TODO: evaluate PLM
+
+# Significance Testing TF-IDF vs all LMs
+print("\nTF-IDF vs. BM25")
+significance_testing(tfidf.all_values, bm25.all_values)
+print("\nTF-IDF vs. LM-Jelinek-Mercer")
+significance_testing(tfidf.all_values, jm_max.all_values)
+print("\nTF-IDF vs. LM-Dirichelt")
+significance_testing(tfidf.all_values, dirich_max.all_values)
+print("\nTF-IDF vs. LM-Absolute-Discounting")
+significance_testing(tfidf.all_values, abs_max.all_values)
+
+
+# LSM
+print("\nLSI values")
+lsi = Evaluation('LSI')
+lsi.get_results("LSI_results.txt")
+
+print("\nLDA values")
+lda = Evaluation('LDA')
+lda.get_results("LDA_results.txt")
+
+# Significance Testing TF-IDF vs all LSMs
+print("\nTF-IDF vs. LSI")
+significance_testing(tfidf.all_values, lsi.all_values)
+print("\nTF-IDF vs. LDA")
+significance_testing(tfidf.all_values, lda.all_values)

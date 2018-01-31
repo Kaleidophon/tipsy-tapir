@@ -153,7 +153,7 @@ def create_query_resources(query_path='./ap_88_89/topics_title'):
     return queries, tokenized_queries, query_terms_inverted, query_term_ids
 
 
-def build_misc_resources(document_ids):
+def build_misc_resources(document_ids, query_terms_inverted):
     # Inverted Index creation.
     start_time = time.time()
 
@@ -171,7 +171,7 @@ def build_misc_resources(document_ids):
         for pos, id_at_pos in enumerate(doc_token_ids):
             if id_at_pos in query_term_ids:
                 for query_id in query_terms_inverted[id_at_pos]:
-                    query_word_positions[doc_token_ids][int(query_id)].append(pos)
+                    query_word_positions[int_doc_id][int(query_id)].append(pos)
 
         document_bow = collections.Counter(
             token_id for token_id in doc_token_ids
@@ -189,14 +189,13 @@ def build_misc_resources(document_ids):
         for query_term_id in query_term_ids:
             assert query_term_id is not None
 
-            tf_C[query_term_id] += inverted_index[query_term_id][int_doc_id]
-
             document_term_frequency = document_bow.get(query_term_id, 0)
 
             if document_term_frequency == 0:
                 continue
 
             inverted_index[query_term_id][int_doc_id] = document_term_frequency
+            tf_C[query_term_id] += document_term_frequency
 
     print('Inverted index creation took', time.time() - start_time, 'seconds.')
     print("Done creating tf_c and query_word_positions.")
@@ -386,7 +385,7 @@ def LM_absolute_discounting(index, query_id, document_id, document_term_freq, nu
         discount = tuning_parameter
         d = index.document_length(document_id)
         C = collection_length
-        if d == 0: return 0
+        if d == 0: return -9999
         number_of_unique_terms = num_unique_words[document_id]
 
         log_sum += np.log(
@@ -459,15 +458,15 @@ def create_all_lexical_run_files(index, document_ids, queries, document_term_fre
     # start = time.time()
     run_retrieval_plm(
         index, 'PLM_passage', queries, document_ids, query_word_positions, background_model, tokenized_queries,
-        kernel=k_passage
+        collection_length, kernel=k_passage
     )
-    end = time.time()
-    print("Retrieval took {:.2f} seconds.".format(end-start))
+    # end = time.time()
+    # print("Retrieval took {:.2f} seconds.".format(end-start))
 
     start = time.time()
     run_retrieval_plm(
         index, 'PLM_gaussian', queries, document_ids, query_word_positions, background_model, tokenized_queries,
-        kernel=k_gaussian
+        collection_length, kernel=k_gaussian
     )
     end = time.time()
     print("Retrieval took {:.2f} seconds.".format(end-start))
@@ -475,7 +474,7 @@ def create_all_lexical_run_files(index, document_ids, queries, document_term_fre
     start = time.time()
     run_retrieval_plm(
         index, 'PLM_triangle', queries, document_ids, query_word_positions, background_model, tokenized_queries,
-        kernel=k_triangle
+        collection_length, kernel=k_triangle
     )
     end = time.time()
     print("Retrieval took {:.2f} seconds.".format(end-start))
@@ -483,7 +482,7 @@ def create_all_lexical_run_files(index, document_ids, queries, document_term_fre
     start = time.time()
     run_retrieval_plm(
         index, 'PLM_cosine', queries, document_ids, query_word_positions, background_model, tokenized_queries,
-        kernel=k_cosine
+        collection_length, kernel=k_cosine
     )
     end = time.time()
     print("Retrieval took {:.2f} seconds.".format(end-start))
@@ -491,10 +490,11 @@ def create_all_lexical_run_files(index, document_ids, queries, document_term_fre
     start = time.time()
     run_retrieval_plm(
         index, 'PLM_circle', queries, document_ids, query_word_positions, background_model, tokenized_queries,
-        kernel=k_circle
+        collection_length, kernel=k_circle
     )
     end = time.time()
     print("Retrieval took {:.2f} seconds.".format(end-start))
+
 
 
 # ------------------------------
@@ -669,20 +669,27 @@ def run_retrieval_embeddings_Savg(index, model_name, queries, document_ids, id2t
 
 
 def run_retrieval_plm(index, model_name, queries, document_ids, query_word_positions, background_model,
-                      tokenized_queries, kernel=k_gaussian):
+                      tokenized_queries, collection_length, kernel=k_gaussian):
     def score_func(index, query_id, document_id, **resource_params):
         query_word_positions = resource_params["query_word_positions"]
         background_model = resource_params.get("background_model", None)
         document_length = index.document_length(document_id)
+        query_term_positions_for_document = query_word_positions[document_id][int(query_id)]
+
+        # If none of the query terms appear in this document, the score is 0
+        if not query_term_positions_for_document:
+            return 0
+
         plm = PLM(
-            query_term_ids, document_length, query_word_positions[document_id][int(query_id)],
-            background_model=background_model, kernel=kernel
+            query_term_ids, document_length, query_term_positions_for_document,
+            background_model=background_model, kernel=kernel, collection_length=collection_length
         )
         score = plm.best_position_strategy_score()
+        print("Score", score)
         return score
 
     return run_retrieval(
-        index, model_name, queries, document_ids, score_func=score_func,
+        index, model_name, queries, document_ids, score_func,
         # Named key word arguments to build as resources before scoring
         query_word_positions=query_word_positions, kernel=kernel, background_model=background_model,
         tokenized_queries=tokenized_queries
@@ -753,8 +760,9 @@ if __name__ == "__main__":
     num_documents = len(document_ids)
 
     queries, tokenized_queries, query_terms_inverted, query_term_ids = create_query_resources()
+
     inverted_index, tf_C, query_word_positions, unique_terms_per_document, avg_doc_length, document_length, \
-        collection_length = build_misc_resources(document_ids)
+        collection_length = build_misc_resources(document_ids, query_terms_inverted)
     # TODO: Which of these data strucutre is document_term_freq(s) used for lexical models??
     document_term_freqs = inverted_index  # TODO: This one is my best guess
 
