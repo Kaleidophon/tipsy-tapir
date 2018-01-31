@@ -50,8 +50,7 @@ class PLM:
 
         return c_m / c_m_tot
 
-    def p_w_D_i_smoothed(self, i, counts, term_id, mu=1500):
-        """ Compute the probability of a word at a certain position in a document using dirichlet smoothing. """
+    def p_w_D_i_smoothed(self, i, counts, term_id, mu=1500):  # Dirichlet smoothing
         c_m = counts[i]
         Z_i = self.c_m_total(i)
         return (c_m + mu * (self.background_model[term_id] / self.collection_length)) / (Z_i + mu)
@@ -79,8 +78,7 @@ class PLM:
         return counts
 
     def S(self, i, counts):
-        """ Score a document given a query. """
-        score = 0
+        score = -9999
         # Only iterate over the query words, not over all the words in the vocabulary for the following reason:
         # We're looking for the maximum score. p(w|Q) is a ML estimate + relevance feedback for a word given a query.
         # Because we only have the ML estimate, p(w|Q) and therefore the whole score will be 0 for words that don't
@@ -118,5 +116,5 @@ class PLM:
         else:
             scores = np.array([self.S(i, counts) for i in self.query_term_positions])
 
-        return np.max(scores) if len(scores) > 0 else 0
+        return np.max(scores) if len(scores) > 0 else -9999
 

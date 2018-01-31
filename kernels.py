@@ -27,5 +27,5 @@ def k_cosine(sigma=50):
 
 def k_circle(sigma=50):
     return plm_kernel(
-        sigma, func=lambda sigma, j: np.sqrt(1 - ((abs(sigma - j) / sigma)) ** 2) if abs(i - j) <= sigma else 0
+        sigma, func=lambda sigma, j: np.sqrt(1 - ((abs(sigma - j) / sigma)) ** 2) if abs(sigma- j) <= sigma else 0
     )

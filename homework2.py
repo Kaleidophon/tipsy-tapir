@@ -20,10 +20,10 @@ from embeddings import doc_kmeans, doc_centroid, doc_tfidf_scaling, VectorCollec
 from kernels import k_passage, k_gaussian, k_cosine, k_triangle, k_circle
 from lsm import LSM
 from plm import PLM
+from LTR import get_input_output_for_features
 
 # GLOBALS
 rankings = collections.defaultdict(lambda: collections.defaultdict(list))
-
 
 # Function to generate run and write it to out_f
 def write_run(model_name, data, out_f,
@@ -402,67 +402,72 @@ def create_all_lexical_run_files(index, document_ids, queries, document_term_fre
                                  tokenized_queries, background_model, idf2df, num_documents):
     print("##### Creating all lexical run files! #####")
 
-    start = time.time()
-    print("Running TFIDF")
-    run_retrieval(
-        index, 'tfidf', queries, document_ids, tf_idf,
-        document_term_freqs=document_term_freqs, tokenized_queries=tokenized_queries, id2df=idf2df,
-        num_documents=num_documents
-    )
-    end = time.time()
-    print("Retrieval took {:.2f} seconds.".format(end-start))
+    # TODO: Uncomment before delivery
+    # start = time.time()
+    # print("Running TFIDF")
+    # run_retrieval(
+    #     index, 'tfidf', queries, document_ids, tf_idf,
+    #     document_term_freqs=document_term_freqs, tokenized_queries=tokenized_queries, id2df=idf2df,
+    #     num_documents=num_documents
+    # )
+    # end = time.time()
+    # print("Retrieval took {:.2f} seconds.".format(end-start))
+    #
+    # start = time.time()
+    # print("Running BM25")
+    # run_retrieval(
+    #     index, 'bm25', queries, document_ids, bm25,
+    #     document_term_freqs=document_term_freqs, avg_doc_length=avg_doc_length, id2df=id2df,
+    #     num_documents=num_documents, tokenized_queries=tokenized_queries
+    # )
+    # end = time.time()
+    # print("Retrieval took {:.2f} seconds.".format(end-start))
+    #
+    # j_m__lambda_values = [0.1, 0.3, 0.5, 0.7, 0.9]
+    # for val in j_m__lambda_values:
+    #     start = time.time()
+    #     print("Running LM_jelinek", val)
+    #     run_retrieval(
+    #         index, 'LM_jelinek_mercer_smoothing_{}'.format(str(val).replace(".", "_")),
+    #         queries, document_ids, LM_jelinek_mercer_smoothing,
+    #         tuning_parameter=val, document_term_freqs=document_term_freqs, collection_length=collection_length,
+    #         tf_C=tf_C, tokenized_queries=tokenized_queries
+    #     )
+    #     end = time.time()
+    #     print("Retrieval took {:.2f} seconds.".format(end-start))
+    #
+    # dirichlet_values = [500, 1000, 1500]
+    # for val in dirichlet_values:
+    #     start = time.time()
+    #     print("Running Dirichlet", val)
+    #     run_retrieval(
+    #         index, 'LM_dirichelt_smoothing_{}'.format(str(val).replace(".", "_")),
+    #         document_ids, queries, LM_dirichlet_smoothing,
+    #         tuning_parameter=val, document_term_freqs=document_term_freqs, collection_length=collection_length,
+    #         tokenized_queries=tokenized_queries
+    #     )
+    #     end = time.time()
+    #     print("Retrieval took {:.2f} seconds.".format(end-start))
+    #
+    # absolute_discounting_values = j_m__lambda_values
+    # for val in absolute_discounting_values:
+    #     start = time.time()
+    #     print("Running ABS_discount", val)
+    #     run_retrieval('LM_absolute_discounting_{}'.format(str(val).replace(".", "_")), LM_absolute_discounting, document_ids, tuning_parameter=val)
+    #     end = time.time()
+    #     print("Retrieval took {:.2f} seconds.".format(end-start))
 
-    start = time.time()
-    print("Running BM25")
-    run_retrieval(
-        index, 'BM25', queries, document_ids, bm25,
-        document_term_freqs=document_term_freqs, avg_doc_length=avg_doc_length, id2df=id2df,
-        num_documents=num_documents, tokenized_queries=tokenized_queries
-    )
-    end = time.time()
-    print("Retrieval took {:.2f} seconds.".format(end-start))
+    # start = time.time()
+    import cProfile
 
-    j_m__lambda_values = [0.1, 0.3, 0.5, 0.7, 0.9]
-    for val in j_m__lambda_values:
-        start = time.time()
-        print("Running LM_jelinek", val)
-        run_retrieval(
-            index, 'jelinek_mercer_{}'.format(str(val).replace(".", "_")),
-            queries, document_ids, LM_jelinek_mercer_smoothing,
-            tuning_parameter=val, document_term_freqs=document_term_freqs, collection_length=collection_length,
-            tf_C=tf_C, tokenized_queries=tokenized_queries
-        )
-        end = time.time()
-        print("Retrieval took {:.2f} seconds.".format(end-start))
-
-    dirichlet_values = [500, 1000, 1500]
-    for val in dirichlet_values:
-        start = time.time()
-        print("Running Dirichlet", val)
-        run_retrieval(
-            index, 'dirichlet_mu_{}'.format(str(val).replace(".", "_")),
-            document_ids, queries, LM_dirichlet_smoothing,
-            tuning_parameter=val, document_term_freqs=document_term_freqs, collection_length=collection_length,
-            tokenized_queries=tokenized_queries
-        )
-        end = time.time()
-        print("Retrieval took {:.2f} seconds.".format(end-start))
-
-    absolute_discounting_values = j_m__lambda_values
-    for val in absolute_discounting_values:
-        start = time.time()
-        print("Running ABS_discount", val)
-        run_retrieval('abs_disc_delta_{}'.format(str(val).replace(".", "_")), absolute_discounting, document_ids, tuning_parameter=val)
-        end = time.time()
-        print("Retrieval took {:.2f} seconds.".format(end-start))
-
+    # cProfile.run("run_retrieval_plm(index, 'PLM_passage', queries, document_ids, query_word_positions, background_model, tokenized_queries, collection_length, kernel=k_passage)")
+    # end = time.time()
+    # print("Retrieval took {:.2f} seconds.".format(end-start))
     start = time.time()
     run_retrieval_plm(
         index, 'PLM_passage', queries, document_ids, query_word_positions, background_model, tokenized_queries,
         collection_length, kernel=k_passage
     )
-    end = time.time()
-    print("Retrieval took {:.2f} seconds.".format(end-start))
 
     start = time.time()
     run_retrieval_plm(
@@ -495,6 +500,7 @@ def create_all_lexical_run_files(index, document_ids, queries, document_term_fre
     )
     end = time.time()
     print("Retrieval took {:.2f} seconds.".format(end-start))
+
 
 
 # ------------------------------
@@ -685,6 +691,8 @@ def run_retrieval_plm(index, model_name, queries, document_ids, query_word_posit
         if not query_term_positions_for_document:
             return 0
 
+        query_term_ids = tokenized_queries[query_id]
+
         plm = PLM(
             query_term_ids, document_length, query_term_positions_for_document,
             background_model=background_model, kernel=kernel, collection_length=collection_length
@@ -794,6 +802,108 @@ def eval_word_embedding_models(index, queries, document_ids, tf_idf, tokenized_q
 # ------------------------------
 # Task 4: Learning to rank (LTR)
 # ------------------------------
+def get_document_id_maps(index, document_ids):
+    id2ext = {}
+    ext2id = {}
+
+    for document_id in document_ids:
+        ext_doc_id, doc_token_ids = index.document(document_id)
+        id2ext[document_id] = ext_doc_id
+        ext2id[ext_doc_id] = document_id
+
+    return id2ext, ext2id
+
+
+def get_top_tf_idf_documents(queries, document_ids, index, max_objects_per_query=1000):
+
+    top_documents_for_query = collections.defaultdict(list)
+
+    id2ext, ext2id = get_document_id_maps(index, document_ids)
+
+    with open("./lexical_results/tfidf.run", "r") as f:
+        for line in f.readlines():
+            query_id, _, external_document_id, ranking, score, class_name = line.split()
+            top_documents_for_query[query_id].append(\
+                (float(score), ext2id[external_document_id], external_document_id))
+
+
+    return top_documents_for_query
+
+def extract_values_from_run_file(filepath):
+    # Since we have already calculated a lot of the feature values in previous runs
+    # we can use these values and only calculate the remaining ones
+    cache = collections.defaultdict(lambda: collections.defaultdict(float))
+    with open(filepath, "r") as f:
+        for line in f.readlines():
+            query_id, _, document_id, ranking, score, class_name = line.split()
+            # Append feature values to the features lookup table directly
+            cache[int(query_id)][document_id] = float(score)
+
+    return cache
+
+def write_features_to_file(features, filepath):
+    s = ""
+
+    for query_id, documents in features.items():
+        for document_id, feature_vector in documents.items():
+            s += "{} {} {}\n".format(query_id, document_id, feature_vector)
+
+    with open(filepath, "w") as f:
+        f.write(s)
+
+
+def extract_features(queries, document_ids, index,\
+            document_term_freqs, avg_doc_length, id2df, num_documents, tokenized_queries, collection_length):
+    """
+    Goal: return features[query_id][document_id] = feature_vector
+
+    """
+    documents_for_query = get_top_tf_idf_documents(queries, document_ids, index)
+
+    features = collections.defaultdict(lambda: collections.defaultdict(list))
+
+    bm25_cache = extract_values_from_run_file("./lexical_results/bm25.run")
+    jm_cache = extract_values_from_run_file("./lexical_results/LM_jelinek_mercer_smoothing_0_7.run")
+
+    i = -1
+    for query_id, documents in documents_for_query.items():
+        i += 1
+        print("Extracting features for query nr {}".format(i))
+        print(documents)
+        for tf_idf_score, document_id, external_document_id in documents:
+            ### The different features
+
+            # tf-idf
+            features[int(query_id)][external_document_id].append(float(tf_idf_score))
+
+            # bm25
+            if external_document_id in bm25_cache[query_id]:
+                score = bm25_cache[query_id][external_document_id]
+
+            else:
+                score = bm25(index, query_id, document_id, document_term_freqs, \
+                        avg_doc_length, id2df, num_documents, tokenized_queries)
+
+            features[int(query_id)][external_document_id].append(float(score))
+
+            # JM
+            if external_document_id in jm_cache[query_id]:
+                score = jm_cache[query_id][external_document_id]
+
+            else:
+                score = LM_jelinek_mercer_smoothing(index, query_id, document_id, document_term_freqs, collection_length, tf_C,
+                                tokenized_queries)
+            features[int(query_id)][external_document_id].append(float(score))
+
+            # Document length
+            features[int(query_id)][external_document_id].append(index.document_length(document_id))
+
+            # Query length
+            features[int(query_id)][external_document_id].append(len(tokenized_queries[query_id]))
+
+    write_features_to_file(features, "./features.txt")
+    return features
+
 
 if __name__ == "__main__":
     index, token2id, id2token, id2df, dictionary, document_ids = create_index_resources()
@@ -803,12 +913,17 @@ if __name__ == "__main__":
 
     inverted_index, tf_C, query_word_positions, unique_terms_per_document, avg_doc_length, document_length, \
         collection_length = build_misc_resources(document_ids, query_terms_inverted)
-    # TODO: Which of these data strucutre is document_term_freq(s) used for lexical models??
-    document_term_freqs = inverted_index  # TODO: This one is my best guess
+    document_term_freqs = inverted_index
 
-    #create_all_lexical_run_files(
-    #    index, document_ids, queries, document_term_freqs, collection_length, tf_C,
-    #    tokenized_queries, background_model=tf_C, idf2df=id2df, num_documents=num_documents
-    #)
-    # TODO: Is really backgroundmodel = tf_C ??
+    # create_all_lexical_run_files(
+    #     index, document_ids, queries, document_term_freqs, collection_length, tf_C,
+    #     tokenized_queries, background_model=tf_C, idf2df=id2df, num_documents=num_documents
+    # )
+    features = extract_features(queries, document_ids, index,\
+            document_term_freqs, avg_doc_length, id2df, num_documents, tokenized_queries, collection_length)
+
+    for feature_vector in features:
+        print("Vector:", feature_vector)
+
+    inputs, outputs = get_input_output_for_features(features)
 

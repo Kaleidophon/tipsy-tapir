@@ -1,6 +1,23 @@
-# data[query_id][document_id] = tf-idf_score_for_document
+import numpy as np
+from collections import defaultdict
 
-data_filepath = "./ap_88_89/qrel_test"
+def create_input_and_output_matrix(features, training_set):
+    input_matrix = []
+    output_vector = []
+
+    # We only iterate over the query-document pairs we actually
+    # have features for
+    for query_id, documents in features.items():
+        for document_id, feature_vector in documents.items():
+            # Since we are using cross-validation,
+            # we risk running into query-document pairs that are
+            # not in the training set, but held out
+            # in the test_set
+            if document_id in training_set[query_id]:
+                input_matrix.append(feature_vector)
+                output_vector.append(training_set[query_id][document_id])
+
+    return input_matrix, output_vector
 
 def cross_validation_set(filepath, k, i):
     """
@@ -12,6 +29,8 @@ def cross_validation_set(filepath, k, i):
     :param filepath: string containing the filepath to the dataset
     :param k: the desired number of partitions
     :param i: the location of which partition to use as a test set
+
+    :returns training_set, test_set: Two dictionarys of the form dict[query_id][document_id] = relevance_of_document_to_query
     """
     assert k > i, "The index of the desired test set partition cannot be greater than the number of partitions"
 
@@ -36,11 +55,30 @@ def cross_validation_set(filepath, k, i):
         partition = data[j:splice]
         partitions.append(partition)
 
-    test_set = partitions.pop(i)
+    held_out_partition = partitions.pop(i)
 
-    return partitions, test_set
+    training_set = defaultdict(dict)
+    test_set = defaultdict(dict)
 
-# Example usage
-training_data, test_data = cross_validation_set(data_filepath, 10, 11)
-# We can now use different values of i to use different portions of the data as test data
+    for partition in partitions:
+        for point in partition:
+            query_id, document_id, relevance = point
+            training_set[int(query_id)][document_id] = int(relevance)
 
+    for point in held_out_partition:
+        query_id, document_id, relevance = point
+        test_set[int(query_id)][document_id] = int(relevance)
+
+    return training_set, test_set
+
+def get_input_output_for_features(features, k=10, i=0):
+    data_filepath = "./ap_88_89/qrel_test"
+
+    training_data, test_data = cross_validation_set(data_filepath, k, i)
+    # We can now use different values of i to use different portions of the data as test data
+
+    inputs, outputs = create_input_and_output_matrix(features, training_data)
+    return inputs, outputs
+
+
+print()
