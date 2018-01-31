@@ -1,3 +1,4 @@
+
 # relative_trec_eval_path=~/Downloads/trec_eval/trec_eval
 relative_trec_eval_path=~/Programming/IR/trec_eval/trec_eval
 
@@ -28,7 +29,7 @@ run_dirichlet () {
 }
 
 # Run tfidf evaluation
-run_single_evaluation "tfidf"
+#run_single_evaluation "tfidf"
 
 # BM25
 run_single_evaluation "bm25"
@@ -49,3 +50,12 @@ run_plm "PLM"
 run_single_evaluation "LSI"
 
 run_single_evaluation "LDA"
+
+# Word embedding
+run_single_evaluation "embeddings_Savg"
+run_single_evaluation "embeddings_So"
+run_single_evaluation "embeddings_So_kmeans_win"
+run_single_evaluation "embeddings_So_tfidf_win"
+run_single_evaluation "embeddings_So_centroid_win_wout"
+run_single_evaluation "embeddings_So_centroid_wout_win"
+run_single_evaluation "embeddings_So_centroid_wout_wout"

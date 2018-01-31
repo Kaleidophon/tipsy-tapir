@@ -9,6 +9,7 @@ import time
 
 
 def train_word_embeddings(sentences, epochs, epsilon=None, save_path=None, **model_parameters):
+    """ Train word embeddings using Gensim's Word2Vec implementation. """
     logging.info('Constructing word2vec vocabulary.')
     word2vec_init = gensim.models.Word2Vec(**model_parameters)
 
@@ -50,16 +51,19 @@ def train_word_embeddings(sentences, epochs, epsilon=None, save_path=None, **mod
 
 
 def save_word2vec_model(model, path):
+    """ Save the model to a path. """
     model.save(path)
 
 
 def build_sentences(pyndri_index):
+    """ Build sentences from the Pyndri Index. """
     dictionary = pyndri.extract_dictionary(pyndri_index)
     sentences = pyndri.compat.IndriSentences(pyndri_index, dictionary)
     return sentences
 
 
 def plot_losses(losses, epochs):
+    """ Create a nice plot of the loss values during the training epochs. """
     plt.plot(range(len(losses)), losses)
     plt.title("Training losses for Word2Vec model for {} iterations".format(epochs))
     plt.show()

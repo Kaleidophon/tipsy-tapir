@@ -20,6 +20,9 @@ class PLM:
         self.full_cm_total = None
 
     def c_m_total(self, i):
+        """
+        Compute the normalization constant Z_i.
+        """
         # Here we're going to apply the mathematical trick from (Lv et al., 2009) section 3.3 where they show that
         # the computation of the normalization factor Z_i can be simplified by realizing that "the sum of propagated
         # counts to a position is equal to that from the position".
@@ -40,6 +43,7 @@ class PLM:
         return np.sum(self.kernel[start_kernel:end_kernel])
 
     def p_w_D_i(self, i, counts, *args):
+        """ Compute the probability of a word at a certain position in a document. """
         c_m = counts[i]
         # We use the simplification that the sum over all words is simply the sum of the kernel function
         c_m_tot = self.c_m_total(i)
@@ -52,6 +56,7 @@ class PLM:
         return (c_m + mu * (self.background_model[term_id] / self.collection_length)) / (Z_i + mu)
 
     def propagate_counts(self, query_term_positions):
+        """ Propagate the counts of query term to neighboring position using a pre-defined kernel function. """
         counts = np.zeros(self.document_length)
         #counts[query_term_positions] = 1  # Set counts of query words at positions in document to 1
 
@@ -92,8 +97,10 @@ class PLM:
         return -score
 
     def best_position_strategy_score(self, use_surrounding_positions=False):
+        """ Use the best position strategy in order to score a document given a query. """
         counts = self.propagate_counts(self.query_term_positions)
 
+        # Compromise: Consider all the words that lie within the sigma-spread of the kernel function of a query term
         if use_surrounding_positions:
             touched_positions = set()
             for query_term_position in self.query_term_positions:
@@ -104,6 +111,8 @@ class PLM:
 
             scores = np.array([self.S(i, counts) for i in touched_positions])
 
+        # Strong simplification assumption: Only consider positions of query terms. Original authors of this model
+        # admit that this doesn't influence performance significantly (see report).
         else:
             scores = np.array([self.S(i, counts) for i in self.query_term_positions])
 
