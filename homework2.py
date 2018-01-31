@@ -731,6 +731,22 @@ def create_document_id_to_repr_map(document_ids):
 # ------------------------------
 # Task 4: Learning to rank (LTR)
 # ------------------------------
+def extract_features(queries, document_ids, index, max_objects_per_query=1000):
+
+    top_documents_for_query = {}
+
+    for i, query in enumerate(queries.items()):
+        query_id, _ = query
+        query_scores = []
+
+        for n, document_id in enumerate(document_ids):
+            ext_doc_id, document_word_positions = index.document(document_id)
+            score = tf_idf(index, query_id, document_id)
+            query_scores.append((score, ext_doc_id))
+
+        top_documents_for_query[query_id] = list(sorted(query_scores, reverse=True))[:max_objects_per_query]
+
+    return top_documents_for_query
 
 if __name__ == "__main__":
     index, token2id, id2token, id2df, dictionary, document_ids = create_index_resources()
