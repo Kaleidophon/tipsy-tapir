@@ -1,22 +1,23 @@
 import numpy as np
 from collections import defaultdict
-from extract_features import extract_feature_vectors
 
-# The data we recieve will be of the form
-# data[query_id][document_id] = features
+def create_input_and_output_matrix(features, training_set):
+    input_matrix = []
+    output_vector = []
 
-def create_input_and_output_matrix(features, training_data):
-    inputs = []
-    outputs = []
+    # We only iterate over the query-document pairs we actually
+    # have features for
+    for query_id, documents in features.items():
+        for document_id, feature_vector in documents.items():
+            # Since we are using cross-validation,
+            # we risk running into query-document pairs that are
+            # not in the training set, but held out
+            # in the test_set
+            if document_id in training_set[query_id]:
+                input_matrix.append(feature_vector)
+                output_vector.append(training_set[query_id][document_id])
 
-    for query_id, documents in training_data.items():
-        for document_id, relevance in documents.items():
-            # Add the feature to the inputs matrix
-            inputs.append(features[int(query_id)][document_id])
-            # Add the relevance label to the coresponding ouput
-            outputs.append(relevance)
-
-    return inputs, outputs
+    return input_matrix, output_vector
 
 def cross_validation_set(filepath, k, i):
     """
@@ -70,14 +71,14 @@ def cross_validation_set(filepath, k, i):
 
     return training_set, test_set
 
-data_filepath = "./ap_88_89/qrel_test"
+def get_input_output_for_features(features, k=10, i=0):
+    data_filepath = "./ap_88_89/qrel_test"
 
-training_data, test_data = cross_validation_set(data_filepath, 10, 5)
-# We can now use different values of i to use different portions of the data as test data
+    training_data, test_data = cross_validation_set(data_filepath, k, i)
+    # We can now use different values of i to use different portions of the data as test data
 
-features = extract_feature_vectors()
-inputs, ouputs = create_input_and_output_matrix(features, training_data)
+    inputs, outputs = create_input_and_output_matrix(features, training_data)
+    return inputs, outputs
 
-print("Length", len(inputs))
-for i in range(len(inputs)):
-    print(inputs[i])
+
+print()

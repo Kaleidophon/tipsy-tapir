@@ -73,7 +73,7 @@ class PLM:
         return counts
 
     def S(self, i, counts):
-        score = 0
+        score = -9999
         # Only iterate over the query words, not over all the words in the vocabulary for the following reason:
         # We're looking for the maximum score. p(w|Q) is a ML estimate + relevance feedback for a word given a query.
         # Because we only have the ML estimate, p(w|Q) and therefore the whole score will be 0 for words that don't
@@ -107,5 +107,5 @@ class PLM:
         else:
             scores = np.array([self.S(i, counts) for i in self.query_term_positions])
 
-        return np.max(scores) if len(scores) > 0 else 0
+        return np.max(scores) if len(scores) > 0 else -9999
 
