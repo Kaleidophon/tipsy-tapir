@@ -13,43 +13,14 @@ import torch.utils.data as data
 
 
 class LinearRanker(nn.Module):
-    def __init__(self, n_features):
+    def __init__(self, n_features=5):
         super().__init__()
         self.linear = nn.Linear(n_features, 1)
 
     def forward(self, x):
         x_var = Variable(x)
         out = self.linear(x_var)
-        return out.data.numpy()
-
-
-class NeuralRanker(nn.Module):
-    def __init__(self, n_features, *n_hiddens, activation=functional.tanh, dropout=0.8):
-        super().__init__()
-        self.activation = activation
-
-        self.hiddens = []  # List of hidden layers
-        for n_layer, n_hidden in enumerate(n_hiddens):
-            if n_layer == 0:
-                self.hiddens.append(nn.Dropout(n_features, n_hidden))
-            else:
-                self.hiddens.append(nn.Linear(n_hiddens[n_layer - 2 if dropout > 0 else 1], n_hidden))
-
-            if dropout > 0:
-                self.hiddens.append(nn.Dropout(p=dropout))
-
-        self.output = nn.Linear(n_hiddens[-1], 1)
-
-    def forward(self, x):
-        x_var = Variable(x)
-
-        for hidden in self.hiddens:
-            x_var = hidden(x_var)
-            x_var = self.activation(x_var)
-
-        x_var = self.output(x_var)
-        x_var = self.activation(x_var)
-        return x_var.data.numpy()
+        return out
 
 
 def train(model, dataset, loss=nn.MSELoss(), learning_rate=0.00001, iterations=10, batch_size=50,

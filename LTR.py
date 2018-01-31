@@ -1,6 +1,26 @@
 import numpy as np
 from collections import defaultdict
 
+import torch
+from torch.utils.data import Dataset
+
+class LTRDataSet(Dataset):
+    def __init__(self, inputs, outputs):
+        super().__init__()
+        self.inputs = inputs
+        self.outputs = outputs
+        self.data = [(torch.from_numpy(np.array(inputs[i])).float(), torch.from_numpy(np.array([outputs[i]])).float()) for i in range(len(inputs))]
+
+    def __getitem__(self, item):
+        return self.data[item]
+
+    def __len__(self):
+        return len(self.inputs)
+
+    def __iter__(self):
+        for x, y in self.data:
+            yield (x, y)
+
 def create_input_and_output_matrix(features, training_set):
     input_matrix = []
     output_vector = []
@@ -71,14 +91,14 @@ def cross_validation_set(filepath, k, i):
 
     return training_set, test_set
 
-def get_input_output_for_features(features, k=10, i=0):
+def get_dataset_for_features(features, k=10, i=0):
     data_filepath = "./ap_88_89/qrel_test"
 
     training_data, test_data = cross_validation_set(data_filepath, k, i)
     # We can now use different values of i to use different portions of the data as test data
 
     inputs, outputs = create_input_and_output_matrix(features, training_data)
-    return inputs, outputs
+    return LTRDataSet(inputs, outputs), test_data
 
 
 print()
