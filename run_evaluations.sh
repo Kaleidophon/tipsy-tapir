@@ -1,4 +1,5 @@
-relative_trec_eval_path=~/Downloads/trec_eval/trec_eval
+# relative_trec_eval_path=~/Downloads/trec_eval/trec_eval
+relative_trec_eval_path=~/Programming/IR/trec_eval/trec_eval
 
 run_single_evaluation () {
   $relative_trec_eval_path -m all_trec -q ap_88_89/qrel_test ./lexical_results/"$1".run | grep "\sall\s" > ./lexical_results/"$1"_results.txt

@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy import stats
+import collections
 
 np.random.seed(12345678) # fix random seed to get same numbers
 
@@ -18,21 +19,32 @@ class Evaluation():
     def __init__(self, model_name):
         self.relevant_values = {}
         self.model_name = model_name
+        self.all_values = collections.defaultdict(list)
 
     def get_results(self, filename):
 
         values = {}
 
+        # TODO: check with Stian ?
+        # with open("./lexical_results/{}".format(filename), "r") as f:
+        #     for line in f.readlines():
+        #         value_name, _, value = line.split()
+        #         if value_name in relevant_values:
+        #             self.relevant_values[value_name] = value
+
         with open("./lexical_results/{}".format(filename), "r") as f:
             for line in f.readlines():
-                value_name, _, value = line.split()
+                value_name, query_id, value = line.split()
                 if value_name in relevant_values:
-                    self.relevant_values[value_name] = value
+                    if query_id == 'all':
+                        self.relevant_values[value_name] = value
+                    else:
+                        self.all_values[value_name] = value
 
         for key, value in self.relevant_values.items():
             print(value_to_name[key], value)
 
-    def plot(x_values, y_values, x_label, y_label):
+    def plot(self, x_values, y_values, x_label, y_label):
         plt.xlabel(x_label)
         plt.ylabel(y_label)
         x_indexes = [i for i in range(len(x_values))]
@@ -40,24 +52,38 @@ class Evaluation():
         plt.xticks(x_indexes, tuple(["{}".format(val) for val in x_values]))
         plt.show()
 
-    def plot_ndcg(dataset_type, parameters, paramterer_name):
+    def plot_ndcg(self, parameters, paramterer_name):
 
         if self.model_name in lang_models:
             ndcg_values = []
             for param in parameters:
-                with open("./lexical_results/{}_results_{}_{}.txt".format(model_name, str(param).replace(".", "_"), eval_type), "r") as f:
+                with open("./lexical_results/{}_results_{}.txt".format(self.model_name, str(param).replace(".", "_")), "r") as f:
                     for line in f.readlines():
                         value_name, _, value = line.split()
                         if value_name == "ndcg_cut_10":
                             ndcg_values.append(float(value))
-            plot(parameters, ndcg_values, paramterer_name, "NDCG@10")
+            self.plot(parameters, ndcg_values, paramterer_name, "NDCG@10")
 
             return ndcg_values
 
 
-    def significance_testing(base_scores, experimental_scores):
-        stats.ttest_rel(eval1,rvs2)
-        pass
+def significance_testing(all_values_base, all_values_experiment):
+
+    # Bonferroni correction
+    # https://en.wikipedia.org/wiki/Bonferroni_correction
+    alpha = 0.05
+    m = None
+
+    for measure in relevant_values:
+        if len(all_values_base[measure]) == len(all_values_experiment[measure]):
+            m = len(all_values_base[measure])
+            t, p_value = ttest_rel(all_values_base[measure], all_values_experiment[measure])
+            if p_value <= (alpha/m):
+                print('Null hypothesis of equal averages rejected for {0}'.format(measure))
+            else:
+                print('Null hypothesis of equal averages accepted for {0}'.format(measure))
+        else:
+            print('Error: m not equal')
 
 # TF-IDF
 print("\nTF-IDF values")
@@ -70,7 +96,6 @@ bm25 = Evaluation('bm25')
 bm25.get_results("BM25_results_validation.txt")
 
 ### Models with varying paramters ###
-dataset_type = "validationset"
 
 # Jelinek-Mercer
 jel_params = [0.1, 0.3, 0.5, 0.7, 0.9]
@@ -82,7 +107,7 @@ print(jel_ndcg_values)
 # Dirichlet Prior
 dirich_params = [500, 1000, 1500]
 dirich = Evaluation('LM_dirichelt_smoothing')
-dir_ndcg_values = dirich.plot_ndcg(dataset_type, dirich_params, "mu")
+dir_ndcg_values = dirich.plot_ndcg(dirich_params, "mu")
 print("\nDirichlet values:")
 print(dir_ndcg_values)
 
