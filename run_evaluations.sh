@@ -1,4 +1,4 @@
-relative_trec_eval_path=~/Desktop/ir/tipsy-tapir/trec_eval
+relative_trec_eval_path=~/Desktop/ir/trec_eval/trec_eval
 
 run_single_evaluation () {
   $relative_trec_eval_path -m all_trec -q ap_88_89/qrel_test ./lexical_results/"$1".run | grep "\sall\s" > ./lexical_results/"$1"_results.txt
@@ -45,5 +45,10 @@ run_dirichlet () {
 #run_single_evaluation "PLM_circle"
 
 # Word embedding
-run_single_evaluation "embeddings_Savg.run"
-run_single_evaluation "embeddings_So.run"
+run_single_evaluation "embeddings_Savg"
+run_single_evaluation "embeddings_So"
+run_single_evaluation "embeddings_So_kmeans_win"
+run_single_evaluation "embeddings_So_tfidf_win"
+run_single_evaluation "embeddings_So_centroid_win_wout"
+run_single_evaluation "embeddings_So_centroid_wout_win"
+run_single_evaluation "embeddings_So_centroid_wout_wout"
