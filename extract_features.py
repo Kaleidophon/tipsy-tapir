@@ -33,18 +33,18 @@ def extract_feature_vectors():
     fill_features_from_run_file("./lexical_results/tfidf.run", features)
 
     # BM25
-    fill_features_from_run_file("./lexical_results/BM25.run", features)
+    fill_features_from_run_file("./lexical_results/bm25.run", features)
 
     # Jelinek-Mercer
     # TODO: Find which parameter is the best
-    fill_features_from_run_file("./lexical_results/jelinek_mercer_0_1.run", features)
+    fill_features_from_run_file("./lexical_results/LM_jelinek_mercer_smoothing_0_1.run", features)
 
     # Drichlet prior
     # TODO: Find which parameter is the best
-    fill_features_from_run_file("./lexical_results/dirichlet_mu_500.run", features)
+    fill_features_from_run_file("./lexical_results/LM_dirichelt_smoothing_500.run", features)
 
     # Absolute discounting
     # TODO: Find which parameter is the best
-    fill_features_from_run_file("./lexical_results/abs_disc_delta_0_1.run", features)
+    fill_features_from_run_file("./lexical_results/LM_absolute_discounting_0_1.run", features)
 
     return features
